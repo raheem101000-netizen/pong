@@ -8,7 +8,8 @@ const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
-app.get('/', (req, res) => res.send('Pong Multiplayer Server running'));
+app.use(express.static(__dirname));
+app.get('/health', (req, res) => res.send('Pong Multiplayer Server running'));
 
 const TICK_RATE      = 60;
 const POINTS_TO_WIN  = 3;
