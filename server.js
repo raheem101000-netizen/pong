@@ -138,6 +138,9 @@ function endSeries(room) {
   io.to(room.code).emit('seriesEnd', { p1Wins: room.p1Wins, p2Wins: room.p2Wins, p1Balance: room.p1Balance, p2Balance: room.p2Balance, results: room.results });
 }
 
+const { setupRoomEvents } = require('./room-server');
+setupRoomEvents(io);
+
 io.on('connection', (socket) => {
   console.log('connect:', socket.id);
   socket.on('createRoom', ({ name }) => {
@@ -185,6 +188,8 @@ io.on('connection', (socket) => {
     delete rooms[code];
   });
 });
+
+app.get('/rooms', (req, res) => res.sendFile(path.join(__dirname, 'rooms.html')));
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => console.log(`Pong server on port ${PORT}`));
