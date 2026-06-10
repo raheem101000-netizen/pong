@@ -206,7 +206,6 @@ const POWERUP_TYPES = {
   ice:    { emoji:'❄️',  color:'#00cfff', duration:2500 },
   fire:   { emoji:'🔥',  color:'#ff6600', duration:3000 },
   shrink: { emoji:'🔒',  color:'#cc44ff', duration:4000 },
-  big:    { emoji:'💥',  color:'#ffdd00', duration:4000 },
   ghost:  { emoji:'👻',  color:'#aaffaa', duration:3000 },
 };
 const POWERUP_KEYS = Object.keys(POWERUP_TYPES);
@@ -223,7 +222,7 @@ function resize() {
   canvas.width = W; canvas.height = H;
   PADDLE_LONG  = Math.round(W * 0.28);
   PADDLE_SHORT = Math.round(H * 0.018);
-  BALL_R = Math.round(Math.min(W,H) * 0.018);
+  BALL_R = Math.round(Math.min(W,H) * 0.009);
   if (gameRunning) initPositions();
 }
 
