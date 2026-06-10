@@ -211,17 +211,11 @@ function connect() {
   socket.on('error', ({ msg }) => showError(msg));
 }
 function sendPaddlePos() {
+  // touch only — keyboard is handled by keyboardLoop
   if (!socket || !gameRunning) return;
-  const pspd = Math.min(W, H) * 0.028;
-  if (localPaddleX === null) {
-    localPaddleX = myRole === 'p1'
-      ? (gameState?.p1?.x ?? W/2 - PADDLE_LONG/2) * (W/400)
-      : (gameState?.p2?.x ?? W/2 - PADDLE_LONG/2) * (W/400);
+  if (localPaddleX !== null) {
+    socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
   }
-  if (keys['ArrowLeft']  || keys['a'] || keys['A']) localPaddleX -= pspd;
-  if (keys['ArrowRight'] || keys['d'] || keys['D']) localPaddleX += pspd;
-  localPaddleX = Math.max(0, Math.min(W - PADDLE_LONG, localPaddleX));
-  socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
 }
 function updateHUD(match, wins, oppW, balance) {
   const tier = getMatchTier(match), color = TIER_COLORS[tier], bal = balance;
@@ -277,7 +271,6 @@ function draw() {
       ctx.fillText(count, W/2, H/2+cs*0.35);
     }
   }
-  sendPaddlePos();
   requestAnimationFrame(draw);
 }
 function showMatchResult(iWon, data) {
@@ -347,6 +340,22 @@ document.getElementById('btn-quit-match').onclick=()=>{ if(socket)socket.disconn
 document.getElementById('btn-cashout').onclick=()=>{ alert('Cashing out $'+Math.max(0,myBalance)+'! (Stripe integration goes here)'); };
 document.getElementById('btn-play-again').onclick=()=>{ document.getElementById('series-result').style.display='none'; document.getElementById('overlay').style.display='flex'; };
 document.getElementById('btn-lobby').onclick=()=>{ if(socket)socket.disconnect(); document.getElementById('series-result').style.display='none'; document.getElementById('overlay').style.display='flex'; };
+function keyboardLoop() {
+  if (gameRunning && (keys['ArrowLeft'] || keys['ArrowRight'] || keys['a'] || keys['A'] || keys['d'] || keys['D'])) {
+    const pspd = Math.min(W, H) * 0.028;
+    if (localPaddleX === null) {
+      localPaddleX = myRole === 'p1'
+        ? (gameState?.p1?.x ?? W/2 - PADDLE_LONG/2) * (W/400)
+        : (gameState?.p2?.x ?? W/2 - PADDLE_LONG/2) * (W/400);
+    }
+    if (keys['ArrowLeft']  || keys['a'] || keys['A']) localPaddleX -= pspd;
+    if (keys['ArrowRight'] || keys['d'] || keys['D']) localPaddleX += pspd;
+    localPaddleX = Math.max(0, Math.min(W - PADDLE_LONG, localPaddleX));
+    socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
+  }
+  requestAnimationFrame(keyboardLoop);
+}
+keyboardLoop();
 window.addEventListener('resize', resize);
 resize(); buildPhaseBar(1); updateHUD(1,0,0,0); draw();
 </script>
