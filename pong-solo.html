@@ -176,7 +176,7 @@ const cdMsg   = document.getElementById('cd-msg');
 let W, H, PADDLE_LONG, PADDLE_SHORT, BALL_R;
 
 // ── SERIES CONFIG ─────────────────────────────────────────────────────────────
-const TOTAL_MATCHES  = 20;
+const TOTAL_MATCHES  = 10;
 const POINTS_TO_WIN  = 3;
 const MATCH_STAKE    = 10;
 
@@ -405,7 +405,7 @@ function clamp(p){
 }
 function ballHitsPaddle(p){
   const b=state.ball, len=getPaddleLen(p);
-  const bigR=(activeEffects.ball&&activeEffects.ball.type==='big')?BALL_R*2.2:BALL_R;
+  const bigR = BALL_R;
   return b.y+bigR>p.y&&b.y-bigR<p.y+PADDLE_SHORT&&b.x+bigR>p.x&&b.x-bigR<p.x+len;
 }
 function deflectOffPaddle(paddle, isP1){
@@ -475,7 +475,7 @@ function update(){
   tickEffects(); tickObstacles();
   const b=state.ball, p1=state.p1, p2=state.p2, keys=state.keys;
   const pspd=Math.min(W,H)*0.028;
-  const bigR=(activeEffects.ball&&activeEffects.ball.type==='big')?BALL_R*2.2:BALL_R;
+  const bigR = BALL_R;
 
   if(ballDelay>0){
     ballDelay--;
@@ -646,7 +646,7 @@ function draw(){
 
   // Ball
   const b=state.ball;
-  const bigR=(activeEffects.ball&&activeEffects.ball.type==='big')?BALL_R*2.2:BALL_R;
+  const bigR = BALL_R;
   const isGhost=activeEffects.ball&&activeEffects.ball.type==='ghost';
   const isFire =activeEffects.ball&&activeEffects.ball.type==='fire';
   const isIce  =activeEffects.ball&&activeEffects.ball.type==='ice';
