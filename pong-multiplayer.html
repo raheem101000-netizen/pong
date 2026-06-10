@@ -153,8 +153,8 @@ let socket, myRole, myName = '';
 let gameState = null;
 let seriesMatch = 1, myWins = 0, oppWins = 0, myBalance = 0;
 let results = [];
-let gameRunning = false, touchX = null;
-let localPaddleX = null; // my paddle tracked locally for instant response
+let gameRunning = false;
+let localPaddleX = null; // raw canvas pixels, same as solo
 let keys = {};
 function connect() {
   socket = io(SERVER_URL, { transports: ['websocket'] });
@@ -212,19 +212,16 @@ function connect() {
 }
 function sendPaddlePos() {
   if (!socket || !gameRunning) return;
-  const pspd = Math.min(W,H) * 0.028;
-  let x;
-  if (touchX !== null) {
-    x = touchX - PADDLE_LONG / 2;
-  } else {
-    const cur = localPaddleX !== null ? localPaddleX : (myRole === 'p1' ? (gameState?.p1?.x ?? W/2-PADDLE_LONG/2) * (W/400) : (gameState?.p2?.x ?? W/2-PADDLE_LONG/2) * (W/400));
-    x = cur;
-    if (keys['ArrowLeft']||keys['a']||keys['A']) x -= pspd;
-    if (keys['ArrowRight']||keys['d']||keys['D']) x += pspd;
+  const pspd = Math.min(W, H) * 0.028;
+  if (localPaddleX === null) {
+    localPaddleX = myRole === 'p1'
+      ? (gameState?.p1?.x ?? W/2 - PADDLE_LONG/2) * (W/400)
+      : (gameState?.p2?.x ?? W/2 - PADDLE_LONG/2) * (W/400);
   }
-  x = Math.max(0, Math.min(W - PADDLE_LONG, x));
-  localPaddleX = x; // store locally for instant rendering
-  socket.emit('paddleMove', { x: x * (400/W) });
+  if (keys['ArrowLeft']  || keys['a'] || keys['A']) localPaddleX -= pspd;
+  if (keys['ArrowRight'] || keys['d'] || keys['D']) localPaddleX += pspd;
+  localPaddleX = Math.max(0, Math.min(W - PADDLE_LONG, localPaddleX));
+  socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
 }
 function updateHUD(match, wins, oppW, balance) {
   const tier = getMatchTier(match), color = TIER_COLORS[tier], bal = balance;
@@ -259,22 +256,14 @@ function draw() {
   ctx.fillStyle='#fff'; ctx.fill();
   const p1y = s.p1.y * (H/660);
   const p2y = s.p2.y * (H/660);
-
-  // Use local position for my paddle (instant), server position for opponent
-  const myLocalX = localPaddleX !== null ? localPaddleX : (myRole === 'p1' ? s.p1.x * (W/400) : s.p2.x * (W/400));
-  const oppServerX = myRole === 'p1' ? s.p2.x * (W/400) : s.p1.x * (W/400);
-
-  if (myRole === 'p1') {
-    ctx.fillStyle = '#4CFF6C';
-    ctx.fillRect(myLocalX, p1y, PADDLE_LONG, PADDLE_SHORT);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(oppServerX, p2y, PADDLE_LONG, PADDLE_SHORT);
-  } else {
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(oppServerX, p1y, PADDLE_LONG, PADDLE_SHORT);
-    ctx.fillStyle = '#4CFF6C';
-    ctx.fillRect(myLocalX, p2y, PADDLE_LONG, PADDLE_SHORT);
-  }
+  const myX  = localPaddleX !== null ? localPaddleX : (myRole==='p1' ? s.p1.x*(W/400) : s.p2.x*(W/400));
+  const oppX = myRole==='p1' ? s.p2.x*(W/400) : s.p1.x*(W/400);
+  const myY  = myRole==='p1' ? p1y : p2y;
+  const oppY = myRole==='p1' ? p2y : p1y;
+  ctx.fillStyle = '#4CFF6C';
+  ctx.fillRect(myX, myY, PADDLE_LONG, PADDLE_SHORT);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(oppX, oppY, PADDLE_LONG, PADDLE_SHORT);
   const fs=Math.round(Math.min(W,H)*0.1);
   ctx.font=`${fs}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#1a1a1a';
   ctx.fillText(s.p2.score, W/2, H/2-fs*0.15);
@@ -337,9 +326,19 @@ function hideAll() { ['overlay','waiting-screen','match-result','series-result']
 function showError(msg) { document.getElementById('error-msg').textContent=msg; setTimeout(()=>{ document.getElementById('error-msg').textContent=''; },3000); }
 document.addEventListener('keydown', e=>{ keys[e.key]=true; if(['ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); });
 document.addEventListener('keyup', e=>{ keys[e.key]=false; });
-canvas.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; const rect = canvas.getBoundingClientRect(); touchX = (t.clientX - rect.left) * (W / rect.width); localPaddleX = touchX - PADDLE_LONG/2; },{passive:false});
-canvas.addEventListener('touchmove',  e => { e.preventDefault(); const t = e.touches[0]; const rect = canvas.getBoundingClientRect(); touchX = (t.clientX - rect.left) * (W / rect.width); localPaddleX = touchX - PADDLE_LONG/2; },{passive:false});
-canvas.addEventListener('touchend',   e=>{ e.preventDefault(); touchX=null; },{passive:false});
+function applyTouch(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  if (e.touches.length === 0) { return; }
+  const t = e.touches[0];
+  const cx = (t.clientX - rect.left) * scaleX;
+  localPaddleX = Math.max(0, Math.min(W - PADDLE_LONG, cx - PADDLE_LONG / 2));
+  socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
+}
+canvas.addEventListener('touchstart', applyTouch, { passive: false });
+canvas.addEventListener('touchmove',  applyTouch, { passive: false });
+canvas.addEventListener('touchend',   e => { e.preventDefault(); }, { passive: false });
 document.getElementById('btn-create').onclick=()=>{ myName=document.getElementById('name-input').value.trim()||'Player 1'; connect(); socket.on('connect',()=>socket.emit('createRoom',{name:myName})); };
 document.getElementById('btn-join').onclick=()=>{ const code=document.getElementById('code-input').value.trim(); if(code.length!==4){showError('Enter a 4-digit code');return;} myName=document.getElementById('name-input').value.trim()||'Player 2'; connect(); socket.on('connect',()=>socket.emit('joinRoom',{code,name:myName})); };
 document.getElementById('btn-cancel').onclick=()=>{ if(socket)socket.disconnect(); document.getElementById('waiting-screen').style.display='none'; document.getElementById('overlay').style.display='flex'; };
