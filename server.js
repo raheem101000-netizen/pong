@@ -27,26 +27,15 @@ const BALL_SPEED     = Math.min(W,H) * 0.022;
 const SPEED_MAX      = Math.min(W,H) * 0.040;
 const TIER_LABELS = ['EASY','EASY+','MEDIUM','MEDIUM+','HARD','HARD+','MAX'];
 
-const rooms = {};
-
-function generateCode() {
-  let code;
-  do { code = String(Math.floor(1000 + Math.random() * 9000)); }
-  while (rooms[code]);
-  return code;
-}
-
 function getMatchTier(m) { return Math.min(Math.floor((m - 1) / 3), 6); }
 
-function createRoom(code) {
-  return {
-    code, players: [], state: null, interval: null,
-    seriesMatch: 1, p1Wins: 0, p2Wins: 0,
-    p1Balance: 0, p2Balance: 0, results: [], phase: 'waiting',
-  };
-}
-
 function initMatchState(room) {
+  if (!room.seriesMatch) room.seriesMatch = 1;
+  if (!room.p1Wins)      room.p1Wins = 0;
+  if (!room.p2Wins)      room.p2Wins = 0;
+  if (!room.p1Balance)   room.p1Balance = 0;
+  if (!room.p2Balance)   room.p2Balance = 0;
+  if (!room.results)     room.results = [];
   room.state = {
     ball: { x: W/2, y: H/2, vx: 0, vy: 0 },
     p1:   { x: W/2 - PADDLE_LONG/2, y: H - PADDLE_SHORT - Math.round(H*0.04), score: 0 },
@@ -138,47 +127,56 @@ function endSeries(room) {
   io.to(room.code).emit('seriesEnd', { p1Wins: room.p1Wins, p2Wins: room.p2Wins, p1Balance: room.p1Balance, p2Balance: room.p2Balance, results: room.results });
 }
 
-const { setupRoomEvents } = require('./room-server');
+const { setupRoomEvents, rooms } = require('./room-server');
 setupRoomEvents(io);
 
 io.on('connection', (socket) => {
   console.log('connect:', socket.id);
-  socket.on('createRoom', ({ name }) => {
-    const code = generateCode(), room = createRoom(code);
-    rooms[code] = room;
-    room.players.push({ id: socket.id, name: name||'Player 1', role: 'p1' });
-    socket.join(code); socket.roomCode = code;
-    socket.emit('roomCreated', { code, role: 'p1' });
-  });
   socket.on('joinRoom', ({ code, name }) => {
     const room = rooms[code];
     if (!room) { socket.emit('error', { msg: 'Room not found' }); return; }
-    if (room.players.length >= 2) { socket.emit('error', { msg: 'Room is full' }); return; }
-    room.players.push({ id: socket.id, name: name||'Player 2', role: 'p2' });
-    socket.join(code); socket.roomCode = code;
-    socket.emit('roomJoined', { code, role: 'p2', opponentName: room.players[0].name });
-    io.to(room.players[0].id).emit('opponentJoined', { opponentName: name||'Player 2' });
-    room.phase = 'countdown'; initMatchState(room);
-    let count = 3;
-    io.to(code).emit('countdown', { count });
-    const t = setInterval(() => { count--; if (count>0) io.to(code).emit('countdown',{count}); else { clearInterval(t); startGameLoop(room); } }, 1000);
+
+    const isP1 = socket.id === room.master;
+    const myRole = isP1 ? 'p1' : 'p2';
+    socket.join(code);
+    socket.roomCode = code;
+
+    if (!room.gameJoined) room.gameJoined = new Set();
+    room.gameJoined.add(socket.id);
+
+    socket.emit('roomJoined', { code, role: myRole });
+
+    if (room.gameJoined.size === 2) {
+      initMatchState(room);
+      let count = 3;
+      io.to(code).emit('countdown', { count });
+      const t = setInterval(() => {
+        count--;
+        if (count > 0) io.to(code).emit('countdown', { count });
+        else { clearInterval(t); startGameLoop(room); }
+      }, 1000);
+    }
   });
   socket.on('paddleMove', ({ x }) => {
-    const room = rooms[socket.roomCode];
+    const code = socket.roomCode;
+    const room = rooms[code];
     if (!room || !room.state) return;
-    const player = room.players.find(p => p.id === socket.id);
-    if (!player) return;
-    if (player.role==='p1') room.state.p1.x = Math.max(0, Math.min(W-PADDLE_LONG, x));
-    if (player.role==='p2') room.state.p2.x = Math.max(0, Math.min(W-PADDLE_LONG, x));
+    const isP1 = room.master === socket.id;
+    if (isP1) room.state.p1.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
+    else      room.state.p2.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
   });
   socket.on('nextMatch', () => {
     const room = rooms[socket.roomCode];
     if (!room) return;
-    const player = room.players.find(p => p.id === socket.id);
-    if (!player) return;
-    player.ready = true;
-    if (room.players.every(p => p.ready)) { room.players.forEach(p => p.ready=false); startNextMatch(room); }
-    else socket.emit('waitingForOpponent');
+    if (!room.nextMatchReady) room.nextMatchReady = new Set();
+    room.nextMatchReady.add(socket.id);
+    const playerIds = Object.keys(room.players);
+    if (room.nextMatchReady.size >= playerIds.length) {
+      room.nextMatchReady.clear();
+      startNextMatch(room);
+    } else {
+      socket.emit('waitingForOpponent');
+    }
   });
   socket.on('disconnect', () => {
     const code = socket.roomCode;
