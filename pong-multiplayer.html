@@ -273,26 +273,20 @@ function draw() {
   requestAnimationFrame(draw);
 }
 function showMatchResult(iWon, data) {
-  const chEl=document.getElementById('mr-change');
-  chEl.textContent=iWon?'+$'+MATCH_STAKE:'-$'+MATCH_STAKE;
-  chEl.style.color=iWon?'#4CFF6C':'#FF4444';
-  const balEl=document.getElementById('mr-balance');
-  balEl.textContent='Balance: '+(myBalance>=0?'+':'')+'$'+myBalance;
-  balEl.style.color=myBalance>0?'#4CFF6C':myBalance<0?'#FF4444':'rgba(255,255,255,0.5)';
-  const p1s=myRole==='p1'?data.p1Score:data.p2Score;
-  const p2s=myRole==='p1'?data.p2Score:data.p1Score;
-  document.getElementById('mr-score').textContent=`${p1s} — ${p2s}`;
-  if (data.seriesOver) {
-    document.getElementById('mr-match').textContent='Series complete';
-    document.getElementById('btn-next-match').textContent='See Results';
-  } else {
-    document.getElementById('mr-match').textContent=`Match ${seriesMatch} of ${TOTAL_MATCHES} — Next: ${TIER_LABELS[getMatchTier(seriesMatch+1)]}`;
-    document.getElementById('btn-next-match').textContent='Next Match →';
-  }
-  document.getElementById('btn-next-match').style.display='block';
-  document.getElementById('mr-waiting').style.display='none';
-  buildTally('mr-tally', results);
-  document.getElementById('match-result').style.display='flex';
+  const chEl = document.getElementById('mr-change');
+  chEl.textContent = iWon ? 'YOU WIN!' : 'YOU LOSE!';
+  chEl.style.color  = iWon ? '#4CFF6C' : '#FF4444';
+
+  const p1s = myRole==='p1' ? data.p1Score : data.p2Score;
+  const p2s = myRole==='p1' ? data.p2Score : data.p1Score;
+  document.getElementById('mr-score').textContent = `${p1s} — ${p2s}`;
+  document.getElementById('mr-balance').textContent = iWon ? 'You earn $10!' : 'No payout this time';
+  document.getElementById('mr-balance').style.color = iWon ? '#4CFF6C' : '#FF4444';
+  document.getElementById('mr-match').textContent = 'First to 10 points';
+  document.getElementById('btn-next-match').textContent = 'Play Again';
+  document.getElementById('btn-next-match').style.display = 'block';
+  document.getElementById('mr-waiting').style.display = 'none';
+  document.getElementById('match-result').style.display = 'flex';
 }
 function showSeriesResult() {
   document.getElementById('match-result').style.display='none';
