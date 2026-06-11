@@ -166,17 +166,16 @@ function connect() {
     document.getElementById('room-code-display').textContent = code;
     document.getElementById('role-label').textContent = 'YOU ARE PLAYER 1 — BOTTOM PADDLE';
   });
-  socket.on('roomJoined', ({ role, opponentName }) => {
+  socket.on('roomJoined', ({ role, myName: serverName, paddlePos }) => {
     myRole = role;
+    if (serverName) myName = serverName;
     document.getElementById('overlay').style.display = 'none';
     document.getElementById('waiting-screen').style.display = 'none';
-    document.getElementById('role-label').textContent = 'YOU ARE PLAYER 2 — TOP PADDLE';
+    document.getElementById('role-label').textContent = myName + ' — ' + paddlePos + ' PADDLE';
     updateHUD(1, 0, 0, 0);
   });
-  socket.on('opponentJoined', ({ opponentName }) => {
-    document.getElementById('waiting-screen').style.display = 'none';
-    document.getElementById('role-label').textContent = 'YOU ARE PLAYER 1 — BOTTOM PADDLE';
-    updateHUD(1, 0, 0, 0);
+  socket.on('opponentName', ({ name }) => {
+    document.getElementById('role-label').textContent = myName + ' vs ' + name;
   });
   socket.on('countdown', ({ count }) => {
     cdMsg.textContent = count; cdMsg.style.opacity = '1';

@@ -136,17 +136,36 @@ io.on('connection', (socket) => {
     const room = rooms[code];
     if (!room) { socket.emit('error', { msg: 'Room not found' }); return; }
 
-    const isP1 = socket.id === room.master;
-    const myRole = isP1 ? 'p1' : 'p2';
     socket.join(code);
     socket.roomCode = code;
 
-    if (!room.gameJoined) room.gameJoined = new Set();
-    room.gameJoined.add(socket.id);
+    if (!room.gameJoined) room.gameJoined = [];
 
-    socket.emit('roomJoined', { code, role: myRole });
+    // Prevent same socket joining twice
+    if (room.gameJoined.find(p => p.id === socket.id)) return;
 
-    if (room.gameJoined.size === 2) {
+    room.gameJoined.push({ id: socket.id, name: name || 'Player' });
+
+    // First to join = p1 (bottom paddle), second = p2 (top paddle)
+    const myIndex = room.gameJoined.length - 1;
+    const myRole = myIndex === 0 ? 'p1' : 'p2';
+    const paddlePos = myRole === 'p1' ? 'BOTTOM' : 'TOP';
+
+    socket.emit('roomJoined', {
+      code,
+      role: myRole,
+      myName: name || 'Player',
+      paddlePos
+    });
+
+    if (room.gameJoined.length === 2) {
+      const p1 = room.gameJoined[0];
+      const p2 = room.gameJoined[1];
+
+      // Tell each player their opponent's name
+      io.to(p1.id).emit('opponentName', { name: p2.name });
+      io.to(p2.id).emit('opponentName', { name: p1.name });
+
       initMatchState(room);
       let count = 3;
       io.to(code).emit('countdown', { count });
@@ -160,10 +179,10 @@ io.on('connection', (socket) => {
   socket.on('paddleMove', ({ x }) => {
     const code = socket.roomCode;
     const room = rooms[code];
-    if (!room || !room.state) return;
-    const isP1 = room.master === socket.id;
-    if (isP1) room.state.p1.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
-    else      room.state.p2.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
+    if (!room || !room.state || !room.gameJoined) return;
+    const idx = room.gameJoined.findIndex(p => p.id === socket.id);
+    if (idx === 0) room.state.p1.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
+    if (idx === 1) room.state.p2.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
   });
   socket.on('nextMatch', () => {
     const room = rooms[socket.roomCode];
