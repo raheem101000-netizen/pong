@@ -155,7 +155,21 @@ function setupRoomEvents(io) {
     socket.on('room:leave', () => leaveRoom());
 
     // Disconnect
-    socket.on('disconnect', () => { if (currentRoom) leaveRoom(); });
+    socket.on('disconnect', (reason) => {
+      if (!currentRoom) return;
+      // Give mobile users 30 seconds to reconnect before removing them
+      const roomCode = currentRoom.code;
+      const playerId = socket.id;
+      setTimeout(() => {
+        const room = rooms[roomCode];
+        if (!room) return;
+        // If player hasn't reconnected, remove them
+        if (room.players[playerId]) {
+          const savedRoom = currentRoom;
+          leaveRoom();
+        }
+      }, 30000);
+    });
 
     function leaveRoom() {
       if (!currentRoom) return;

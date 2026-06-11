@@ -61,8 +61,8 @@ td.room-enter{text-align:right;}
 
 /* START BTN */
 .btn-start-now{background:#b450ff;color:#fff;border:none;padding:12px 28px;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;border-radius:10px;cursor:pointer;margin-bottom:24px;display:none;}
-.btn-start-now:hover{opacity:0.85;}
-.btn-start-now:disabled{opacity:0.3;cursor:not-allowed;}
+.btn-start-now:not(:disabled){background:#b450ff;}
+.btn-start-now:disabled{background:rgba(180,80,255,0.2);color:rgba(255,255,255,0.3);cursor:not-allowed;}
 
 /* PLAYERS TABLE */
 .players-count{font-size:14px;color:rgba(255,255,255,0.4);margin-bottom:12px;}
@@ -327,12 +327,13 @@ function updateActions() {
   const btnReady=document.getElementById('btn-ready');
   const btnStart=document.getElementById('btn-start');
   if(!myRoom) return;
-  // Host sees Start button, guest sees Ready button
   btnStart.style.display=isMaster?'inline-block':'none';
   btnReady.style.display=(!isMaster)?'inline-block':'none';
   const players=myRoom.players||[];
-  const allReady=players.length===2&&players.every(p=>p.ready);
-  btnStart.disabled=!allReady;
+  // Host can start as long as opponent is present and ready
+  const guestReady=players.filter(p=>!p.master).every(p=>p.ready);
+  const hasGuest=players.length===2;
+  btnStart.disabled=!(hasGuest && guestReady);
   if(isReady){ btnReady.textContent='✓ Ready!'; btnReady.classList.add('is-ready'); }
   else { btnReady.textContent='Ready?'; btnReady.classList.remove('is-ready'); }
 }
