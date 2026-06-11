@@ -113,8 +113,6 @@ function setupRoomEvents(io) {
       currentRoom.players[socket.id] = playerData;
       io.to(currentRoom.code).emit('room:player:ready', { player: serializePlayer(playerData) });
       io.to(currentRoom.code).emit('room:state', serializeRoom(currentRoom));
-
-      // Check if both players are ready (guest ready + host ready)
       const players = Object.values(currentRoom.players);
       const allReady = players.length === 2 && players.every(p => p.ready);
       if (allReady) {
@@ -125,6 +123,23 @@ function setupRoomEvents(io) {
           players: players.map(p => serializePlayer(p))
         });
       }
+    });
+
+    socket.on('room:launch', () => {
+      if (!currentRoom || currentRoom.master !== socket.id) return;
+      const players = Object.values(currentRoom.players);
+      if (players.length < 2) { socket.emit('room:error', { message: 'Need 2 players' }); return; }
+      const guestReady = players.filter(p => !p.master).every(p => p.ready);
+      if (!guestReady) { socket.emit('room:error', { message: 'Waiting for opponent to ready up' }); return; }
+      // Mark host as ready and start
+      playerData.ready = true;
+      currentRoom.players[socket.id] = playerData;
+      currentRoom.started = true;
+      broadcastRoomList(io);
+      io.to(currentRoom.code).emit('room:game:start', {
+        code: currentRoom.code,
+        players: players.map(p => serializePlayer(p))
+      });
     });
 
     // Chat

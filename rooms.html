@@ -352,9 +352,9 @@ document.getElementById('btn-ready').onclick=()=>{
 
 document.getElementById('btn-start').onclick=()=>{
   const players=myRoom?.players||[];
-  const allReady=players.length===2&&players.every(p=>p.ready);
-  if(!allReady){status('Waiting for opponent to ready up','err');return;}
-  socket.emit('room:ready');
+  const guestReady=players.filter(p=>!p.master).every(p=>p.ready);
+  if(!guestReady){status('Waiting for opponent to ready up','err');return;}
+  socket.emit('room:launch');
 };
 
 document.getElementById('btn-leave').onclick=()=>{
