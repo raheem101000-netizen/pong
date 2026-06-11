@@ -16,8 +16,8 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => res.send('Pong Multiplayer Server running'));
 
 const TICK_RATE      = 60;
-const POINTS_TO_WIN  = 3;
-const TOTAL_MATCHES  = 20;
+const POINTS_TO_WIN  = 10;
+const TOTAL_MATCHES  = 1;
 const MATCH_STAKE    = 10;
 const W = 400, H = 660;
 const BALL_R         = Math.round(Math.min(W,H) * 0.018);
@@ -106,16 +106,12 @@ function startGameLoop(room) {
 
 function endMatch(room, winner) {
   room.phase = 'matchEnd';
-  if (winner==='p1') { room.p1Wins++; room.p1Balance+=MATCH_STAKE; room.p2Balance-=MATCH_STAKE; }
-  else               { room.p2Wins++; room.p2Balance+=MATCH_STAKE; room.p1Balance-=MATCH_STAKE; }
-  room.results.push(winner);
+  const p1won = winner === 'p1';
   io.to(room.code).emit('matchEnd', {
-    winner, p1Score: room.state.p1.score, p2Score: room.state.p2.score,
-    p1Wins: room.p1Wins, p2Wins: room.p2Wins,
-    p1Balance: room.p1Balance, p2Balance: room.p2Balance,
-    match: room.seriesMatch, total: TOTAL_MATCHES, results: room.results,
-    seriesOver: room.seriesMatch >= TOTAL_MATCHES,
-    nextTier: room.seriesMatch < TOTAL_MATCHES ? TIER_LABELS[getMatchTier(room.seriesMatch+1)] : null,
+    winner,
+    p1Score: room.state.p1.score,
+    p2Score: room.state.p2.score,
+    seriesOver: true,
   });
 }
 
