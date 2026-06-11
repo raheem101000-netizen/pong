@@ -358,6 +358,19 @@ function keyboardLoop() {
 keyboardLoop();
 window.addEventListener('resize', resize);
 resize(); buildPhaseBar(1); updateHUD(1,0,0,0); draw();
+
+// Auto-join from rooms lobby
+const urlParams = new URLSearchParams(window.location.search);
+const roomFromURL = urlParams.get('room');
+const nameFromURL = urlParams.get('name');
+if (roomFromURL && nameFromURL) {
+  myName = nameFromURL;
+  document.getElementById('overlay').style.display = 'none';
+  connect();
+  socket.on('connect', () => {
+    socket.emit('joinRoom', { code: roomFromURL, name: myName });
+  });
+}
 </script>
 </body>
 </html>
