@@ -127,11 +127,7 @@ canvas { display: block; width: 100%; border-radius: 0 0 8px 8px; background: #0
         <button class="btn active" id="btn-1p">1 PLAYER</button>
         <button class="btn" id="btn-2p">2 PLAYERS</button>
       </div>
-      <div class="menu-row" id="diff-row">
-        <button class="btn active" data-diff="easy">EASY</button>
-        <button class="btn" data-diff="medium">MEDIUM</button>
-        <button class="btn" data-diff="hard">HARD</button>
-      </div>
+
       <button class="btn btn-primary" id="btn-start">Start Series</button>
       <div id="menu-hint">
         Drag finger / Arrow keys to move<br>
@@ -190,7 +186,7 @@ let seriesP1Wins  = 0;
 let seriesAIWins  = 0;
 let seriesResults = [];
 let seriesBalance = 0;
-let baseDifficulty = 'easy';
+
 
 // ── GAME STATE ────────────────────────────────────────────────────────────────
 const BALL_SPEED = () => Math.min(W,H) * 0.022;
@@ -722,21 +718,14 @@ document.getElementById('btn-1p').onclick=()=>{
   mode='1p';
   document.getElementById('btn-1p').classList.add('active');
   document.getElementById('btn-2p').classList.remove('active');
-  document.getElementById('diff-row').style.display='flex';
+
 };
 document.getElementById('btn-2p').onclick=()=>{
   mode='2p';
   document.getElementById('btn-2p').classList.add('active');
   document.getElementById('btn-1p').classList.remove('active');
-  document.getElementById('diff-row').style.display='none';
+
 };
-document.querySelectorAll('[data-diff]').forEach(btn=>{
-  btn.onclick=()=>{
-    baseDifficulty=btn.dataset.diff;
-    document.querySelectorAll('[data-diff]').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-  };
-});
 document.getElementById('btn-start').onclick      = startSeries;
 document.getElementById('btn-next-match').onclick  = nextMatch;
 document.getElementById('btn-quit-series').onclick = ()=>{
