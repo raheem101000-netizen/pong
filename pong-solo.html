@@ -430,47 +430,98 @@ function predictLanding(){
   }
   return bx;
 }
-function moveAI(){
-  if(isFrozen(state.p2)) return;
-  const p=state.p2, b=state.ball, len=getPaddleLen(p);
-  const tier=currentTier;
+function moveAI() {
+  if (isFrozen(state.p2)) return;
+  const p = state.p2;
+  const b = state.ball;
+  const len = getPaddleLen(p);
+
   const tierSpeed = seriesMatch <= 2 ? 0.018
                   : seriesMatch >= 8 ? 0.038
                   : 0.028;
-  const pspd=Math.min(W,H)*tierSpeed;
+  const pspd = Math.min(W,H) * tierSpeed;
+
   let target;
-  if(tier<=1){
-    const coming=b.vy<0;
-    if(!coming) target=W/2-len/2+(Math.random()-0.5)*W*(tier===0?0.4:0.25);
-    else{ target=b.x-len/2+(Math.random()-0.5)*len*(tier===0?1.8:1.3); if(Math.random()<(tier===0?0.018:0.008))target=Math.random()*(W-len);}
-  } else if(tier<=3){
-    const coming=b.vy<0;
-    if(!coming) target=W/2-len/2+(Math.random()-0.5)*len*0.3;
-    else{
-      const land=predictLanding();
-      const wall=Math.abs(b.vx)>Math.abs(b.vy)*0.6;
-      const err=wall&&Math.random()<(tier===2?0.32:0.18)?(Math.random()-0.5)*len*1.0:(Math.random()-0.5)*len*(tier===2?0.55:0.35);
-      target=land-len/2+err;
-      if(Math.random()<(tier===2?0.09:0.04)) target+=(Math.random()-0.5)*len*0.7;
+
+  if (seriesMatch <= 2) {
+    // CLUMSY HUMAN — slow, big errors, occasionally loses ball
+    const ballComing = b.vy < 0;
+    if (!ballComing) {
+      target = W/2 - len/2 + (Math.random()-0.5) * W * 0.4;
+    } else {
+      target = b.x - len/2 + (Math.random()-0.5) * len * 1.8;
+      if (Math.random() < 0.02) target = Math.random() * (W - len);
     }
-  } else {
-    if(aiReactionDelay>0){
+
+  } else if (seriesMatch <= 4) {
+    // SKILLED HUMAN — reacts to ball, no prediction, reaction delay, misjudges wall bounces
+    if (aiReactionDelay > 0) {
       aiReactionDelay--;
-      if(aiTargetCache!==null){const d=aiTargetCache-p.x;if(Math.abs(d)>1)p.x+=Math.sign(d)*Math.min(pspd*0.6,Math.abs(d));}
+      if (aiTargetCache !== null) {
+        const diff = aiTargetCache - p.x;
+        if (Math.abs(diff) > 1) p.x += Math.sign(diff) * Math.min(pspd * 0.3, Math.abs(diff));
+      }
       return;
     }
-    const land=predictLanding();
-    const right=b.vx>0;
-    const aim=len*(tier===6?0.42:0.36)*(right?-1:1);
-    const sharp=Math.abs(b.vx)>Math.abs(b.vy)*0.8;
-    const mc=tier===4?0.18:tier===5?0.09:0.03;
-    const err=sharp&&Math.random()<mc?(Math.random()-0.5)*len*0.7:(Math.random()-0.5)*len*(tier===6?0.04:0.09);
-    target=land-len/2+aim+err;
-    aiTargetCache=target;
-    aiReactionDelay=tier===6?1:tier===5?2:3;
+    const ballComing = b.vy < 0;
+    if (!ballComing) {
+      target = W/2 - len/2 + (Math.random()-0.5) * len * 0.5;
+    } else {
+      const isWallBounce = Math.abs(b.vx) > Math.abs(b.vy) * 0.5;
+      const wallError = isWallBounce && Math.random() < 0.35
+        ? (Math.random()-0.5) * len * 1.4
+        : (Math.random()-0.5) * len * 0.5;
+      target = b.x - len/2 + wallError;
+      if (Math.random() < 0.1) target += (Math.random()-0.5) * len * 0.8;
+    }
+    aiTargetCache = target;
+    aiReactionDelay = Math.floor(Math.random() * 10) + 10;
+
+  } else if (seriesMatch <= 7) {
+    // PREDICTIVE AI — matches 5-7, same speed as player, small errors
+    if (aiReactionDelay > 0) {
+      aiReactionDelay--;
+      if (aiTargetCache !== null) {
+        const diff = aiTargetCache - p.x;
+        if (Math.abs(diff) > 1) p.x += Math.sign(diff) * Math.min(pspd * 0.6, Math.abs(diff));
+      }
+      return;
+    }
+    const land = predictLanding();
+    const ballMovingRight = b.vx > 0;
+    const aimOffset = len * 0.38 * (ballMovingRight ? -1 : 1);
+    const isSharp = Math.abs(b.vx) > Math.abs(b.vy) * 0.8;
+    const err = isSharp && Math.random() < 0.15
+      ? (Math.random()-0.5) * len * 0.6
+      : (Math.random()-0.5) * len * 0.12;
+    target = land - len/2 + aimOffset + err;
+    aiTargetCache = target;
+    aiReactionDelay = 3;
+
+  } else {
+    // NEAR PERFECT AI — matches 8-10, faster than player, almost no errors
+    if (aiReactionDelay > 0) {
+      aiReactionDelay--;
+      if (aiTargetCache !== null) {
+        const diff = aiTargetCache - p.x;
+        if (Math.abs(diff) > 1) p.x += Math.sign(diff) * Math.min(pspd * 0.6, Math.abs(diff));
+      }
+      return;
+    }
+    const land = predictLanding();
+    const ballMovingRight = b.vx > 0;
+    const aimOffset = len * 0.42 * (ballMovingRight ? -1 : 1);
+    const isSharp = Math.abs(b.vx) > Math.abs(b.vy) * 0.8;
+    const err = isSharp && Math.random() < 0.03
+      ? (Math.random()-0.5) * len * 0.4
+      : (Math.random()-0.5) * len * 0.04;
+    target = land - len/2 + aimOffset + err;
+    aiTargetCache = target;
+    aiReactionDelay = 1;
   }
-  const diff=target-p.x;
-  if(Math.abs(diff)>1) p.x+=Math.sign(diff)*Math.min(pspd,Math.abs(diff));
+
+  const diff = target - p.x;
+  if (Math.abs(diff) > 1) p.x += Math.sign(diff) * Math.min(pspd, Math.abs(diff));
 }
 
 // ── UPDATE ────────────────────────────────────────────────────────────────────
