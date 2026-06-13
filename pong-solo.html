@@ -434,7 +434,10 @@ function moveAI(){
   if(isFrozen(state.p2)) return;
   const p=state.p2, b=state.ball, len=getPaddleLen(p);
   const tier=currentTier;
-  const pspd=Math.min(W,H)*(0.010+tier*0.004);
+  const tierSpeed = seriesMatch <= 2 ? 0.018
+                  : seriesMatch >= 8 ? 0.038
+                  : 0.028;
+  const pspd=Math.min(W,H)*tierSpeed;
   let target;
   if(tier<=1){
     const coming=b.vy<0;
