@@ -181,7 +181,7 @@ function connect() {
     cdMsg.textContent = count; cdMsg.style.opacity = '1';
     setTimeout(() => { cdMsg.style.opacity = '0'; }, 800);
   });
-  socket.on('state', (s) => { gameState = s; gameRunning = true; sendPaddlePos(); });
+  socket.on('state', (s) => { gameState = s; gameRunning = true; });
   socket.on('matchEnd', (data) => {
     gameRunning = false; gameState = null;
     seriesMatch = data.match;
@@ -208,6 +208,13 @@ function connect() {
     setTimeout(() => { hideAll(); document.getElementById('overlay').style.display = 'flex'; }, 2500);
   });
   socket.on('error', ({ msg }) => showError(msg));
+
+  // Send paddle position continuously at 60hz — independent of incoming state
+  setInterval(() => {
+    if (socket && socket.connected && localPaddleX !== null && gameRunning) {
+      socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
+    }
+  }, 16);
 }
 function sendPaddlePos() {
   // touch only — keyboard is handled by keyboardLoop
