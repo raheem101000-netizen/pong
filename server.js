@@ -64,21 +64,25 @@ function tickBall(room) {
   if (b.x - BALL_R < 0)  { b.x = BALL_R;     b.vx =  Math.abs(b.vx); }
   if (b.x + BALL_R > W)  { b.x = W - BALL_R; b.vx = -Math.abs(b.vx); }
   function hitPaddle(p, isP1) {
-    const prevY = b.y - b.vy;
-    const hitX = b.x+BALL_R>p.x && b.x-BALL_R<p.x+PADDLE_LONG;
-    const hitYNow = b.y+BALL_R>p.y && b.y-BALL_R<p.y+PADDLE_SHORT;
-    const paddleY = isP1 ? p.y : p.y+PADDLE_SHORT;
+    const prevX = b.x - b.vx, prevY = b.y - b.vy;
+    const faceY = isP1 ? p.y : p.y + PADDLE_SHORT;
+    const ballFacePrev = isP1 ? prevY - BALL_R : prevY + BALL_R;
+    const ballFaceNow  = isP1 ? b.y - BALL_R   : b.y + BALL_R;
     const crossed = isP1
-      ? (prevY-BALL_R > paddleY && b.y-BALL_R <= paddleY)
-      : (prevY+BALL_R < paddleY && b.y+BALL_R >= paddleY);
-
-    if (hitX && (hitYNow || crossed)) {
-      const rel = (b.x-(p.x+PADDLE_LONG/2))/(PADDLE_LONG/2);
+      ? (ballFacePrev > faceY && ballFaceNow <= faceY)
+      : (ballFacePrev < faceY && ballFaceNow >= faceY);
+    if (!crossed) return;
+    const denom = (ballFaceNow - ballFacePrev) || 1;
+    const t = (faceY - ballFacePrev) / denom;
+    const crossX = prevX + (b.x - prevX) * t;
+    if (crossX + BALL_R > p.x && crossX - BALL_R < p.x + PADDLE_LONG) {
+      const rel = (crossX - (p.x + PADDLE_LONG/2)) / (PADDLE_LONG/2);
       const clampedRel = Math.max(-1, Math.min(1, rel));
-      const spd = Math.min(Math.hypot(b.vx,b.vy)+0.3, SPEED_MAX);
-      b.vx = Math.sin(clampedRel*(Math.PI/4))*spd;
-      b.vy = Math.cos(clampedRel*(Math.PI/4))*spd*(isP1?-1:1);
-      b.y = isP1 ? p.y-BALL_R-1 : p.y+PADDLE_SHORT+BALL_R+1;
+      const spd = Math.min(Math.hypot(b.vx, b.vy) + 0.3, SPEED_MAX);
+      b.vx = Math.sin(clampedRel*(Math.PI/4)) * spd;
+      b.vy = Math.cos(clampedRel*(Math.PI/4)) * spd * (isP1 ? -1 : 1);
+      b.x = crossX;
+      b.y = isP1 ? p.y - BALL_R - 1 : p.y + PADDLE_SHORT + BALL_R + 1;
     }
   }
   hitPaddle(s.p1, true); hitPaddle(s.p2, false);
