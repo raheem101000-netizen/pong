@@ -256,8 +256,10 @@ function draw() {
   ctx.fillStyle='#fff'; ctx.fill();
   const p1y = s.p1.y * (H/660);
   const p2y = s.p2.y * (H/660);
-  const myX  = localPaddleX !== null ? localPaddleX : (myRole==='p1' ? s.p1.x*(W/400) : s.p2.x*(W/400));
-  const oppX = myRole==='p1' ? s.p2.x*(W/400) : s.p1.x*(W/400);
+  const myServerX  = myRole==='p1' ? s.p1.x : s.p2.x;
+  const oppServerX = myRole==='p1' ? s.p2.x : s.p1.x;
+  const myX  = myServerX  * (W/400);
+  const oppX = oppServerX * (W/400);
   const myY  = myRole==='p1' ? p1y : p2y;
   const oppY = myRole==='p1' ? p2y : p1y;
   ctx.fillStyle = '#4CFF6C';
