@@ -66,11 +66,11 @@ function tickBall(room) {
   function hitPaddle(p, isP1) {
     const prevX = b.x - b.vx, prevY = b.y - b.vy;
     const faceY = isP1 ? p.y : p.y + PADDLE_SHORT;
-    const ballFacePrev = isP1 ? prevY - BALL_R : prevY + BALL_R;
-    const ballFaceNow  = isP1 ? b.y - BALL_R   : b.y + BALL_R;
+    const ballFacePrev = isP1 ? prevY + BALL_R : prevY - BALL_R;
+    const ballFaceNow  = isP1 ? b.y + BALL_R   : b.y - BALL_R;
     const crossed = isP1
-      ? (ballFacePrev > faceY && ballFaceNow <= faceY)
-      : (ballFacePrev < faceY && ballFaceNow >= faceY);
+      ? (ballFacePrev <= faceY && ballFaceNow >= faceY)
+      : (ballFacePrev >= faceY && ballFaceNow <= faceY);
     if (!crossed) return;
     const denom = (ballFaceNow - ballFacePrev) || 1;
     const t = (faceY - ballFacePrev) / denom;
