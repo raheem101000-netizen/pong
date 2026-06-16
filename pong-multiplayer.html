@@ -261,10 +261,7 @@ function draw() {
   const oppServerX = myRole==='p1' ? s.p2.x : s.p1.x;
   // My paddle: instant local response — no waiting for server
   const myX = localPaddleX !== null ? localPaddleX : myServerX * (W/400);
-  // Opponent: smooth interpolation toward server position
-  if(oppRenderX === null) oppRenderX = oppServerX * (W/400);
-  oppRenderX += (oppServerX * (W/400) - oppRenderX) * 0.4;
-  const oppX = oppRenderX;
+  const oppX = oppServerX * (W/400);
   const myY  = myRole==='p1' ? p1y : p2y;
   const oppY = myRole==='p1' ? p2y : p1y;
   ctx.fillStyle = '#4CFF6C';
