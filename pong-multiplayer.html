@@ -145,7 +145,7 @@ function resize() {
   W = Math.min(window.innerWidth, 420);
   H = Math.min(window.innerHeight - 80, 660);
   canvas.width = W; canvas.height = H;
-  PADDLE_LONG  = Math.round(W * 0.28);
+  PADDLE_LONG  = Math.round(112 * (W/400));
   PADDLE_SHORT = Math.round(H * 0.018);
   BALL_R = Math.round(Math.min(W,H) * 0.018);
 }
@@ -155,6 +155,7 @@ let seriesMatch = 1, myWins = 0, oppWins = 0, myBalance = 0;
 let results = [];
 let gameRunning = false;
 let localPaddleX = null; // raw canvas pixels, same as solo
+let oppRenderX = null;
 let keys = {};
 function connect() {
   socket = io(SERVER_URL, { transports: ['websocket'] });
@@ -258,8 +259,12 @@ function draw() {
   const p2y = s.p2.y * (H/660);
   const myServerX  = myRole==='p1' ? s.p1.x : s.p2.x;
   const oppServerX = myRole==='p1' ? s.p2.x : s.p1.x;
-  const myX  = myServerX  * (W/400);
-  const oppX = oppServerX * (W/400);
+  // My paddle: instant local response — no waiting for server
+  const myX = localPaddleX !== null ? localPaddleX : myServerX * (W/400);
+  // Opponent: smooth interpolation toward server position
+  if(oppRenderX === null) oppRenderX = oppServerX * (W/400);
+  oppRenderX += (oppServerX * (W/400) - oppRenderX) * 0.4;
+  const oppX = oppRenderX;
   const myY  = myRole==='p1' ? p1y : p2y;
   const oppY = myRole==='p1' ? p2y : p1y;
   ctx.fillStyle = '#4CFF6C';
@@ -328,7 +333,8 @@ function applyTouch(e) {
   if (e.touches.length === 0) { return; }
   const t = e.touches[0];
   const cx = (t.clientX - rect.left) * scaleX;
-  localPaddleX = Math.max(0, Math.min(W - PADDLE_LONG, cx - PADDLE_LONG / 2));
+  const clientPaddleLong = 112 * (W/400);
+  localPaddleX = Math.max(0, Math.min(W - clientPaddleLong, cx - clientPaddleLong / 2));
   socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
 }
 canvas.addEventListener('touchstart', applyTouch, { passive: false });
