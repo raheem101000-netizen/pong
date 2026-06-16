@@ -340,6 +340,14 @@ function applyTouch(e) {
 canvas.addEventListener('touchstart', applyTouch, { passive: false });
 canvas.addEventListener('touchmove',  applyTouch, { passive: false });
 canvas.addEventListener('touchend',   e => { e.preventDefault(); }, { passive: false });
+canvas.addEventListener('mousemove', e => {
+  if (!gameRunning) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const cx = (e.clientX - rect.left) * scaleX;
+  const clientPaddleLong = 112 * (W/400);
+  localPaddleX = Math.max(0, Math.min(W - clientPaddleLong, cx - clientPaddleLong / 2));
+});
 document.getElementById('btn-create').onclick=()=>{ myName=document.getElementById('name-input').value.trim()||'Player 1'; connect(); socket.on('connect',()=>socket.emit('createRoom',{name:myName})); };
 document.getElementById('btn-join').onclick=()=>{ const code=document.getElementById('code-input').value.trim(); if(code.length!==4){showError('Enter a 4-digit code');return;} myName=document.getElementById('name-input').value.trim()||'Player 2'; connect(); socket.on('connect',()=>socket.emit('joinRoom',{code,name:myName})); };
 document.getElementById('btn-cancel').onclick=()=>{ if(socket)socket.disconnect(); document.getElementById('waiting-screen').style.display='none'; document.getElementById('overlay').style.display='flex'; };
