@@ -209,9 +209,16 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const code = socket.roomCode;
     if (!code || !rooms[code]) return;
-    if (rooms[code].interval) clearInterval(rooms[code].interval);
-    io.to(code).emit('opponentLeft');
-    delete rooms[code];
+    const room = rooms[code];
+    const wasInGame = room.gameJoined && room.gameJoined.find(p => p.id === socket.id);
+    if (!wasInGame) return;
+    room.gameJoined = room.gameJoined.filter(p => p.id !== socket.id);
+    if (room.phase === 'playing' && room.interval) {
+      clearInterval(room.interval);
+      room.interval = null;
+      io.to(code).emit('opponentLeft');
+      delete rooms[code];
+    }
   });
 });
 
