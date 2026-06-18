@@ -82,6 +82,12 @@ const PADDLE_SHORT = Math.round(SERVER_H*0.018);
 let socket = null;
 let myRole = null;        // 'p1' or 'p2'
 let myName = 'Player';
+// Persistent ID that survives socket reconnects — used to re-bind to our player slot.
+let myClientId = sessionStorage.getItem('pongClientId');
+if(!myClientId){
+  myClientId = 'c' + Date.now() + Math.random().toString(36).slice(2,8);
+  sessionStorage.setItem('pongClientId', myClientId);
+}
 let roomCode = null;
 let gameState = null;     // latest server state — the ONLY source of truth
 let phase = 'menu';       // menu | waiting | countdown | playing | result
@@ -98,12 +104,24 @@ function connect(){
   if(socket) return;
   socket = io();
 
+  // On EVERY connect — including auto-reconnects after a dropped WebSocket —
+  // re-join the room so the server re-binds our (new) socket ID to our player slot.
+  // Without this, a reconnect gets a new socket ID that isn't in gameJoined,
+  // and all our paddle input is silently dropped → paddle frozen at the wall.
+  socket.on('connect', () => {
+    if(roomCode){
+      socket.emit('joinRoom', { code: roomCode, name: myName, clientId: myClientId });
+    }
+  });
+
   socket.on('roomJoined', ({code, role}) => {
     roomCode = code;
     myRole = role;
     document.getElementById('roomCode').textContent = code;
-    phase = 'waiting';
-    show('waiting');
+    if(phase === 'menu' || phase === 'waiting'){
+      phase = 'waiting';
+      show('waiting');
+    }
   });
 
   socket.on('waitingForOpponent', () => {
@@ -267,7 +285,7 @@ document.getElementById('joinBtn').onclick = () => {
   if(code.length !== 4){ alert('Enter a 4-digit code'); return; }
   myName = document.getElementById('nameInput').value.trim() || 'Player';
   connect();
-  const go = () => socket.emit('joinRoom', { code, name: myName });
+  const go = () => socket.emit('joinRoom', { code, name: myName, clientId: myClientId });
   if(socket.connected) go(); else socket.once('connect', go);
 };
 document.getElementById('cancelBtn').onclick = () => {
@@ -288,7 +306,7 @@ if(urlRoom){
   myName = urlName || 'Player';
   show(null);
   connect();
-  const go = () => socket.emit('joinRoom', { code: urlRoom, name: myName });
+  const go = () => socket.emit('joinRoom', { code: urlRoom, name: myName, clientId: myClientId });
   if(socket.connected) go(); else socket.once('connect', go);
 }
 

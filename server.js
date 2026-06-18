@@ -49,7 +49,6 @@ function resetBall(state, towardsP1) {
   state.ball.x = W/2; state.ball.y = H/2;
   state.ball.vx = 0; state.ball.vy = 0;
   state.delay = 90; state._pendingDir = towardsP1;
-  console.log('RESET: p1.dir=' + state.p1.dir + ' p1.x=' + Math.round(state.p1.x) + ' | p2.dir=' + state.p2.dir + ' p2.x=' + Math.round(state.p2.x));
 }
 
 function tickBall(room) {
@@ -147,7 +146,7 @@ setupRoomEvents(io);
 
 io.on('connection', (socket) => {
   console.log('connect:', socket.id);
-  socket.on('joinRoom', ({ code, name }) => {
+  socket.on('joinRoom', ({ code, name, clientId }) => {
     const room = rooms[code];
     if (!room) { socket.emit('error', { msg: 'Room not found' }); return; }
 
@@ -156,10 +155,33 @@ io.on('connection', (socket) => {
 
     if (!room.gameJoined) room.gameJoined = [];
 
-    // Prevent same socket joining twice
+    // Same socket already joined — nothing to do
     if (room.gameJoined.find(p => p.id === socket.id)) return;
 
-    room.gameJoined.push({ id: socket.id, name: name || 'Player' });
+    // RECONNECT: a player with this clientId already has a slot, but their old
+    // socket dropped (Render kills idle WebSockets). Re-bind THIS new socket
+    // to that existing slot instead of adding a third player. Without this,
+    // the reconnected socket isn't recognised and all its input is dropped,
+    // freezing the paddle at the wall.
+    const existing = clientId ? room.gameJoined.find(p => p.clientId === clientId) : null;
+    if (existing) {
+      const oldId = existing.id;
+      // Cancel the pending match-end timer for the old socket — we're back.
+      if (room.graceTimers && room.graceTimers[oldId]) {
+        clearTimeout(room.graceTimers[oldId]);
+        delete room.graceTimers[oldId];
+      }
+      existing.id = socket.id;
+      existing.disconnectedAt = null;
+      const idx = room.gameJoined.indexOf(existing);
+      const myRole = idx === 0 ? 'p1' : 'p2';
+      socket.emit('roomJoined', { code, role: myRole, myName: name, paddlePos: myRole === 'p1' ? 'BOTTOM' : 'TOP' });
+      console.log('REBIND: ' + (name||'?') + ' ' + oldId + ' -> ' + socket.id + ' as ' + myRole);
+      return;
+    }
+
+    // New player joining for the first time
+    room.gameJoined.push({ id: socket.id, name: name || 'Player', clientId: clientId || null });
 
     // First to join = p1 (bottom paddle), second = p2 (top paddle)
     const myIndex = room.gameJoined.length - 1;
@@ -211,7 +233,6 @@ io.on('connection', (socket) => {
     const d = dir === -1 ? -1 : dir === 1 ? 1 : 0;
     if (idx === 0) room.state.p1.dir = d;
     if (idx === 1) room.state.p2.dir = d;
-    if (idx === -1) console.log('DIR-FAIL: socket ' + socket.id + ' not in gameJoined! dir=' + d);
   });
   socket.on('nextMatch', () => {
     const room = rooms[socket.roomCode];
@@ -230,15 +251,26 @@ io.on('connection', (socket) => {
     const code = socket.roomCode;
     if (!code || !rooms[code]) return;
     const room = rooms[code];
-    const wasInGame = room.gameJoined && room.gameJoined.find(p => p.id === socket.id);
-    if (!wasInGame) return;
-    room.gameJoined = room.gameJoined.filter(p => p.id !== socket.id);
-    if (room.phase === 'playing' && room.interval) {
-      clearInterval(room.interval);
-      room.interval = null;
-      io.to(code).emit('opponentLeft');
-      delete rooms[code];
-    }
+    const player = room.gameJoined && room.gameJoined.find(p => p.id === socket.id);
+    if (!player) return;
+    // DO NOT delete the room or remove the player immediately. Render drops
+    // idle WebSockets constantly; the player will auto-reconnect and re-bind
+    // (joinRoom with same clientId). Keep their slot alive. Mark them as
+    // temporarily gone, and only end the match if they don't return in time.
+    player.disconnectedAt = Date.now();
+    if (room.graceTimers && room.graceTimers[socket.id]) clearTimeout(room.graceTimers[socket.id]);
+    if (!room.graceTimers) room.graceTimers = {};
+    const deadId = socket.id;
+    room.graceTimers[deadId] = setTimeout(() => {
+      // If this slot still holds the dead socket id (no reconnect rebound it), end the match.
+      const stillDead = room.gameJoined && room.gameJoined.find(p => p.id === deadId);
+      if (stillDead) {
+        room.gameJoined = room.gameJoined.filter(p => p.id !== deadId);
+        if (room.interval) { clearInterval(room.interval); room.interval = null; }
+        io.to(code).emit('opponentLeft');
+        delete rooms[code];
+      }
+    }, 12000); // 12s grace for reconnect
   });
 });
 
