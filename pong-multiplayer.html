@@ -181,7 +181,7 @@ function connect() {
     cdMsg.textContent = count; cdMsg.style.opacity = '1';
     setTimeout(() => { cdMsg.style.opacity = '0'; }, 800);
   });
-  socket.on('state', (s) => { gameState = s; gameRunning = true; sendPaddlePos(); });
+  socket.on('state', (s) => { gameState = s; gameRunning = true; });
   socket.on('matchEnd', (data) => {
     gameRunning = false; gameState = null;
     seriesMatch = data.match;
@@ -349,6 +349,16 @@ function keyboardLoop() {
   requestAnimationFrame(keyboardLoop);
 }
 keyboardLoop();
+
+// Steady independent paddle sender — does NOT depend on receiving state and does
+// NOT use requestAnimationFrame (which pauses when the screen dims). Ensures the
+// server always has this player's current paddle position. Fixes opponent-appears-
+// frozen and ball-through-fast-moving-paddle.
+setInterval(() => {
+  if (socket && socket.connected && gameRunning && localPaddleX !== null) {
+    socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
+  }
+}, 1000 / 40);
 window.addEventListener('resize', resize);
 resize(); buildPhaseBar(1); updateHUD(1,0,0,0); draw();
 
