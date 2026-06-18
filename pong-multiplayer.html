@@ -161,6 +161,12 @@ let localPaddleX = null; // raw canvas pixels, same as solo
 let keys = {};
 function connect() {
   socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
+  // Keepalive heartbeat — keeps the WebSocket active so Render's free tier
+  // never sees it idle and recycles it mid-game (the cause of the mid-game
+  // desync). This is what Curvytron does to survive the same free tier.
+  setInterval(() => {
+    if (socket && socket.connected) socket.emit('hb');
+  }, 15000);
   socket.on('disconnect', (reason) => console.log('[CLIENT] disconnected:', reason));
   socket.io.on('reconnect', (n) => console.log('[CLIENT] reconnected after', n, 'attempts'));
   socket.on('connect_error', () => showError('Cannot connect to server'));

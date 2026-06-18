@@ -6,7 +6,9 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
+  cors: { origin: '*', methods: ['GET', 'POST'] },
+  pingInterval: 10000,
+  pingTimeout: 20000
 });
 
 app.use(express.static(path.join(__dirname)));
@@ -138,6 +140,7 @@ setupRoomEvents(io);
 
 io.on('connection', (socket) => {
   console.log('connect:', socket.id);
+  socket.on('hb', () => { /* keepalive ping, no action needed */ });
   socket.on('joinRoom', ({ code, name }) => {
     const room = rooms[code];
     if (!room) { socket.emit('error', { msg: 'Room not found' }); return; }
