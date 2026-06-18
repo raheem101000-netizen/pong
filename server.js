@@ -99,10 +99,16 @@ function checkScore(room) {
 function startGameLoop(room) {
   if (room.interval) clearInterval(room.interval);
   room.phase = 'playing';
+  let broadcastCounter = 0;
   room.interval = setInterval(() => {
     if (!room.state) return;
     const winner = tickBall(room);
-    io.to(room.code).emit('state', { ball: room.state.ball, p1: room.state.p1, p2: room.state.p2, delay: room.state.delay });
+    // Simulate at full rate, but only BROADCAST every ~3rd tick (~20/sec) to avoid
+    // flooding Render's free tier — the cause of mid-match lag and freezing.
+    broadcastCounter++;
+    if (broadcastCounter % 3 === 0 || winner || room.state.delay > 0) {
+      io.to(room.code).emit('state', { ball: room.state.ball, p1: room.state.p1, p2: room.state.p2, delay: room.state.delay });
+    }
     if (winner) { clearInterval(room.interval); room.interval = null; endMatch(room, winner); }
   }, 1000 / TICK_RATE);
 }
