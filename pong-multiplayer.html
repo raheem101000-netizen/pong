@@ -141,6 +141,9 @@ const canvas  = document.getElementById('canvas');
 const ctx     = canvas.getContext('2d');
 const cdMsg   = document.getElementById('cd-msg');
 let W, H, PADDLE_LONG, PADDLE_SHORT, BALL_R;
+const S_W = 400, S_H = 660;
+const S_PADDLE_LONG = Math.round(S_W * 0.28);   // 112, matches server
+const PADDLE_SHORT_S = Math.round(S_H * 0.018);  // 12, server-unit paddle height
 function resize() {
   W = Math.min(window.innerWidth, 420);
   H = Math.min(window.innerHeight - 80, 660);
@@ -213,7 +216,7 @@ function sendPaddlePos() {
   // touch only — keyboard is handled by keyboardLoop
   if (!socket || !gameRunning) return;
   if (localPaddleX !== null) {
-    socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
+    socket.emit('paddleMove', { x: localPaddleX });
   }
 }
 function updateHUD(match, wins, oppW, balance) {
@@ -245,14 +248,21 @@ function draw() {
   ctx.strokeStyle='#111'; ctx.lineWidth=1; ctx.setLineDash([6,8]);
   ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke(); ctx.setLineDash([]);
   ctx.beginPath();
-  ctx.arc(s.ball.x*(W/400), s.ball.y*(H/660), BALL_R, 0, Math.PI*2);
+  const ballSX = (myRole === 'p2') ? (S_W - s.ball.x) : s.ball.x;
+  const ballSY = (myRole === 'p2') ? (S_H - s.ball.y) : s.ball.y;
+  ctx.arc(ballSX*(W/S_W), ballSY*(H/S_H), BALL_R, 0, Math.PI*2);
   ctx.fillStyle='#fff'; ctx.fill();
-  const p1y = s.p1.y * (H/660);
-  const p2y = s.p2.y * (H/660);
-  const myX  = localPaddleX !== null ? localPaddleX : (myRole==='p1' ? s.p1.x*(W/400) : s.p2.x*(W/400));
-  const oppX = myRole==='p1' ? s.p2.x*(W/400) : s.p1.x*(W/400);
-  const myY  = myRole==='p1' ? p1y : p2y;
-  const oppY = myRole==='p1' ? p2y : p1y;
+  const flip = myRole === 'p2';
+  const flipY = (sy) => flip ? (S_H - sy - PADDLE_SHORT_S) : sy;
+  const mirrorX = (sx) => flip ? (S_W - sx - S_PADDLE_LONG) : sx;
+  const myServerX  = localPaddleX !== null ? localPaddleX : (myRole==='p1' ? s.p1.x : s.p2.x);
+  const oppServerX = myRole==='p1' ? s.p2.x : s.p1.x;
+  const myServerY  = myRole==='p1' ? s.p1.y : s.p2.y;
+  const oppServerY = myRole==='p1' ? s.p2.y : s.p1.y;
+  const myX  = mirrorX(myServerX)  * (W/S_W);
+  const oppX = mirrorX(oppServerX) * (W/S_W);
+  const myY  = flipY(myServerY) * (H/S_H);
+  const oppY = flipY(oppServerY) * (H/S_H);
   ctx.fillStyle = '#4CFF6C';
   ctx.fillRect(myX, myY, PADDLE_LONG, PADDLE_SHORT);
   ctx.fillStyle = '#fff';
@@ -315,12 +325,13 @@ document.addEventListener('keyup', e=>{ keys[e.key]=false; });
 function applyTouch(e) {
   e.preventDefault();
   const rect = canvas.getBoundingClientRect();
-  const scaleX = W / rect.width;
   if (e.touches.length === 0) { return; }
   const t = e.touches[0];
-  const cx = (t.clientX - rect.left) * scaleX;
-  localPaddleX = Math.max(0, Math.min(W - PADDLE_LONG, cx - PADDLE_LONG / 2));
-  socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
+  const serverX = ((t.clientX - rect.left) / rect.width) * S_W;
+  let paddleLeft = Math.max(0, Math.min(S_W - S_PADDLE_LONG, serverX - S_PADDLE_LONG / 2));
+  if (myRole === 'p2') paddleLeft = S_W - paddleLeft - S_PADDLE_LONG; // un-mirror for server
+  localPaddleX = paddleLeft;
+  socket.emit('paddleMove', { x: localPaddleX });
 }
 canvas.addEventListener('touchstart', applyTouch, { passive: false });
 canvas.addEventListener('touchmove',  applyTouch, { passive: false });
@@ -335,16 +346,17 @@ document.getElementById('btn-play-again').onclick=()=>{ document.getElementById(
 document.getElementById('btn-lobby').onclick=()=>{ if(socket)socket.disconnect(); document.getElementById('series-result').style.display='none'; document.getElementById('overlay').style.display='flex'; };
 function keyboardLoop() {
   if (gameRunning && (keys['ArrowLeft'] || keys['ArrowRight'] || keys['a'] || keys['A'] || keys['d'] || keys['D'])) {
-    const pspd = Math.min(W, H) * 0.028;
+    const pspd = S_W * 0.028;
     if (localPaddleX === null) {
       localPaddleX = myRole === 'p1'
-        ? (gameState?.p1?.x ?? W/2 - PADDLE_LONG/2) * (W/400)
-        : (gameState?.p2?.x ?? W/2 - PADDLE_LONG/2) * (W/400);
+        ? (gameState?.p1?.x ?? S_W/2 - S_PADDLE_LONG/2)
+        : (gameState?.p2?.x ?? S_W/2 - S_PADDLE_LONG/2);
     }
-    if (keys['ArrowLeft']  || keys['a'] || keys['A']) localPaddleX -= pspd;
-    if (keys['ArrowRight'] || keys['d'] || keys['D']) localPaddleX += pspd;
-    localPaddleX = Math.max(0, Math.min(W - PADDLE_LONG, localPaddleX));
-    socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
+    const dir = myRole === 'p2' ? -1 : 1; // p2 view is mirrored, invert keys
+    if (keys['ArrowLeft']  || keys['a'] || keys['A']) localPaddleX -= pspd * dir;
+    if (keys['ArrowRight'] || keys['d'] || keys['D']) localPaddleX += pspd * dir;
+    localPaddleX = Math.max(0, Math.min(S_W - S_PADDLE_LONG, localPaddleX));
+    socket.emit('paddleMove', { x: localPaddleX });
   }
   requestAnimationFrame(keyboardLoop);
 }
@@ -356,7 +368,7 @@ keyboardLoop();
 // frozen and ball-through-fast-moving-paddle.
 setInterval(() => {
   if (socket && socket.connected && gameRunning && localPaddleX !== null) {
-    socket.emit('paddleMove', { x: localPaddleX * (400 / W) });
+    socket.emit('paddleMove', { x: localPaddleX });
   }
 }, 1000 / 40);
 window.addEventListener('resize', resize);
