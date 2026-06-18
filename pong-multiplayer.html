@@ -167,25 +167,38 @@ function connect(){
   });
 }
 
-// ── Input: send mouse/touch X to server. NEVER move locally. ──
-function sendPaddle(clientX){
-  if(!socket || !roomCode || phase!=='playing') return;
-  const rect = canvas.getBoundingClientRect();
-  const scale = SERVER_W / rect.width;
-  const x = (clientX - rect.left) * scale;
-  const clamped = Math.max(0, Math.min(SERVER_W - PADDLE_LONG, x - PADDLE_LONG/2));
-  socket.emit('paddleMove', { x: clamped });
+// ── Input: send paddle DIRECTION to server (left/right keys). Server moves & clamps. ──
+// Pure renderer: client never moves the paddle, only reports intent. Cannot get stuck.
+let paddleDir = 0; // -1 left, 0 stop, +1 right
+
+function sendDir(){
+  if(socket && roomCode && phase==='playing'){
+    socket.emit('paddleDir', { dir: paddleDir });
+  }
 }
 
-canvas.addEventListener('mousemove', e => sendPaddle(e.clientX));
-canvas.addEventListener('touchmove', e => {
-  if(e.touches[0]) sendPaddle(e.touches[0].clientX);
-  e.preventDefault();
-}, {passive:false});
-canvas.addEventListener('touchstart', e => {
-  if(e.touches[0]) sendPaddle(e.touches[0].clientX);
-  e.preventDefault();
-}, {passive:false});
+document.addEventListener('keydown', e => {
+  if(e.code==='ArrowLeft' || e.code==='KeyA'){ paddleDir=-1; sendDir(); e.preventDefault(); }
+  if(e.code==='ArrowRight'|| e.code==='KeyD'){ paddleDir= 1; sendDir(); e.preventDefault(); }
+});
+document.addEventListener('keyup', e => {
+  if((e.code==='ArrowLeft'||e.code==='KeyA') && paddleDir===-1){ paddleDir=0; sendDir(); }
+  if((e.code==='ArrowRight'||e.code==='KeyD') && paddleDir=== 1){ paddleDir=0; sendDir(); }
+});
+
+// On-screen touch buttons for mobile (left / right halves of canvas)
+function touchDir(clientX){
+  const rect = canvas.getBoundingClientRect();
+  const mid = rect.left + rect.width/2;
+  paddleDir = clientX < mid ? -1 : 1;
+  sendDir();
+}
+canvas.addEventListener('touchstart', e => { if(e.touches[0]) touchDir(e.touches[0].clientX); e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchmove',  e => { if(e.touches[0]) touchDir(e.touches[0].clientX); e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchend',   e => { paddleDir=0; sendDir(); e.preventDefault(); }, {passive:false});
+
+// Re-send direction every 100ms while held, in case a packet drops (keeps server in sync)
+setInterval(() => { if(paddleDir!==0) sendDir(); }, 100);
 
 // ── RENDER LOOP — draws server state exactly. World = canvas (scale 1). ──
 function draw(){
