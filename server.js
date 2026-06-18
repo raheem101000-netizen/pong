@@ -217,6 +217,7 @@ io.on('connection', (socket) => {
     }
   });
   socket.on('disconnect', () => {
+    console.log('DISCONNECT: socket=' + socket.id + ' room=' + (socket.roomCode||'none'));
     const code = socket.roomCode;
     if (!code || !rooms[code]) return;
     if (rooms[code].interval) clearInterval(rooms[code].interval);
