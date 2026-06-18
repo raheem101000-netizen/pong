@@ -195,8 +195,12 @@ io.on('connection', (socket) => {
     const room = rooms[code];
     if (!room || !room.state || !room.gameJoined) return;
     const idx = room.gameJoined.findIndex(p => p.id === socket.id);
-    if (idx === 0) room.state.p1.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
-    if (idx === 1) room.state.p2.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
+    const clamped = Math.max(0, Math.min(W - PADDLE_LONG, x));
+    if (idx === 0) room.state.p1.x = clamped;
+    if (idx === 1) room.state.p2.x = clamped;
+    if (x < 5 || x > W - PADDLE_LONG - 5) {
+      console.log('EDGE: idx=' + idx + ' rawX=' + Math.round(x) + ' clamped=' + Math.round(clamped) + ' max=' + (W - PADDLE_LONG));
+    }
   });
   socket.on('paddleDir', ({ dir }) => {
     const code = socket.roomCode;
