@@ -158,6 +158,7 @@ let seriesMatch = 1, myWins = 0, oppWins = 0, myBalance = 0;
 let results = [];
 let gameRunning = false;
 let keys = {};
+let localPaddleX = null; // server units (0-400), this browser owns its own paddle
 function connect() {
   socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
   // Keepalive heartbeat — keeps the WebSocket active so Render's free tier
@@ -188,12 +189,13 @@ function connect() {
     document.getElementById('role-label').textContent = myName + ' vs ' + name;
   });
   socket.on('countdown', ({ count }) => {
+    if (count === 3) localPaddleX = null; // reset for new match
     cdMsg.textContent = count; cdMsg.style.opacity = '1';
     setTimeout(() => { cdMsg.style.opacity = '0'; }, 800);
   });
   socket.on('state', (s) => { gameState = s; gameRunning = true; });
   socket.on('matchEnd', (data) => {
-    gameRunning = false; gameState = null;
+    gameRunning = false; gameState = null; localPaddleX = null;
     seriesMatch = data.match;
     const iWon = (myRole==='p1'&&data.winner==='p1')||(myRole==='p2'&&data.winner==='p2');
     myBalance = myRole==='p1' ? data.p1Balance : data.p2Balance;
@@ -255,7 +257,7 @@ function draw() {
   const flip = myRole === 'p2';
   const flipY = (sy) => flip ? (S_H - sy - PADDLE_SHORT_S) : sy;
   const mirrorX = (sx) => flip ? (S_W - sx - S_PADDLE_LONG) : sx;
-  const myServerX  = (myRole==='p1' ? s.p1.x : s.p2.x);
+  const myServerX  = (localPaddleX !== null ? localPaddleX : (myRole==='p1' ? s.p1.x : s.p2.x));
   const oppServerX = myRole==='p1' ? s.p2.x : s.p1.x;
   const myServerY  = myRole==='p1' ? s.p1.y : s.p2.y;
   const oppServerY = myRole==='p1' ? s.p2.y : s.p1.y;
@@ -324,19 +326,16 @@ document.addEventListener('keydown', e=>{ keys[e.key]=true; if(['ArrowLeft','Arr
 document.addEventListener('keyup', e=>{ keys[e.key]=false; });
 function applyTouch(e) {
   e.preventDefault();
-  if (e.touches.length === 0) { setDir(0); return; }
+  if (e.touches.length === 0) return;
   const rect = canvas.getBoundingClientRect();
   const t = e.touches[0];
-  const half = rect.left + rect.width / 2;
-  // Touch left half = move left on MY screen, right half = right. p2's view is
-  // mirrored, so invert for them so it matches what they see.
-  let d = t.clientX < half ? -1 : 1;
-  if (myRole === 'p2') d = -d;
-  setDir(d);
+  let serverX = ((t.clientX - rect.left) / rect.width) * S_W;
+  if (myRole === 'p2') serverX = S_W - serverX;
+  localPaddleX = Math.max(0, Math.min(S_W - S_PADDLE_LONG, serverX - S_PADDLE_LONG / 2));
 }
 canvas.addEventListener('touchstart', applyTouch, { passive: false });
 canvas.addEventListener('touchmove',  applyTouch, { passive: false });
-canvas.addEventListener('touchend',   e => { e.preventDefault(); setDir(0); }, { passive: false });
+canvas.addEventListener('touchend',   e => { e.preventDefault(); }, { passive: false });
 document.getElementById('btn-create').onclick=()=>{ myName=document.getElementById('name-input').value.trim()||'Player 1'; connect(); socket.on('connect',()=>socket.emit('createRoom',{name:myName})); };
 document.getElementById('btn-join').onclick=()=>{ const code=document.getElementById('code-input').value.trim(); if(code.length!==4){showError('Enter a 4-digit code');return;} myName=document.getElementById('name-input').value.trim()||'Player 2'; connect(); socket.on('connect',()=>socket.emit('joinRoom',{code,name:myName})); };
 document.getElementById('btn-cancel').onclick=()=>{ if(socket)socket.disconnect(); document.getElementById('waiting-screen').style.display='none'; document.getElementById('overlay').style.display='flex'; };
@@ -345,25 +344,30 @@ document.getElementById('btn-quit-match').onclick=()=>{ if(socket)socket.disconn
 document.getElementById('btn-cashout').onclick=()=>{ alert('Cashing out $'+Math.max(0,myBalance)+'! (Stripe integration goes here)'); };
 document.getElementById('btn-play-again').onclick=()=>{ document.getElementById('series-result').style.display='none'; document.getElementById('overlay').style.display='flex'; };
 document.getElementById('btn-lobby').onclick=()=>{ if(socket)socket.disconnect(); document.getElementById('series-result').style.display='none'; document.getElementById('overlay').style.display='flex'; };
-// Send paddle direction to the server. Server owns the paddle; we only report intent.
-let lastDir = 0;
-function setDir(d) {
-  if (d !== lastDir) {
-    lastDir = d;
-    if (socket && socket.connected) socket.emit('paddleDir', { dir: d });
+// Browser owns its own paddle — move locally each rAF, send position at 40Hz.
+function paddleLoop() {
+  if (gameRunning) {
+    if (localPaddleX === null) {
+      localPaddleX = (myRole === 'p1'
+        ? (gameState?.p1?.x ?? S_W/2 - S_PADDLE_LONG/2)
+        : (gameState?.p2?.x ?? S_W/2 - S_PADDLE_LONG/2));
+    }
+    const pspd = S_W * 0.028;
+    let left  = keys['ArrowLeft']  || keys['a'] || keys['A'];
+    let right = keys['ArrowRight'] || keys['d'] || keys['D'];
+    if (myRole === 'p2') { const tmp = left; left = right; right = tmp; }
+    if (left)  localPaddleX -= pspd;
+    if (right) localPaddleX += pspd;
+    localPaddleX = Math.max(0, Math.min(S_W - S_PADDLE_LONG, localPaddleX));
   }
+  requestAnimationFrame(paddleLoop);
 }
-function currentKeyDir() {
-  const left  = keys['ArrowLeft']  || keys['a'] || keys['A'];
-  const right = keys['ArrowRight'] || keys['d'] || keys['D'];
-  let d = (left === right) ? 0 : (left ? -1 : 1);
-  if (myRole === 'p2') d = -d; // p2 view mirrored
-  return d;
-}
-document.addEventListener('keydown', () => { if (gameRunning) setDir(currentKeyDir()); });
-document.addEventListener('keyup',   () => { if (gameRunning) setDir(currentKeyDir()); });
-// Steady re-send so a dropped packet can never leave the paddle stuck.
-setInterval(() => { if (socket && socket.connected && gameRunning) socket.emit('paddleDir', { dir: lastDir }); }, 100);
+paddleLoop();
+setInterval(() => {
+  if (socket && socket.connected && gameRunning && localPaddleX !== null) {
+    socket.emit('paddleMove', { x: localPaddleX });
+  }
+}, 1000 / 40);
 window.addEventListener('resize', resize);
 resize(); buildPhaseBar(1); updateHUD(1,0,0,0); draw();
 
