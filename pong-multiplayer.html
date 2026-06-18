@@ -152,6 +152,7 @@ function resize() {
   PADDLE_SHORT = Math.round(H * 0.018);
   BALL_R = Math.round(Math.min(W,H) * 0.018);
 }
+const browserId = (() => { let id = localStorage.getItem('pong_bid'); if (!id) { id = Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10); localStorage.setItem('pong_bid',id); } return id; })();
 let socket, myRole, myName = '';
 let gameState = null;
 let seriesMatch = 1, myWins = 0, oppWins = 0, myBalance = 0;
@@ -380,11 +381,11 @@ if (roomFromURL && nameFromURL) {
   document.getElementById('overlay').style.display = 'none';
   connect();
   socket.on('connect', () => {
-    socket.emit('joinRoom', { code: roomFromURL, name: myName });
+    socket.emit('joinRoom', { code: roomFromURL, name: myName, bid: browserId });
   });
-  // Re-join on EVERY reconnect so the server rebinds our new socket id.
+  // Re-join on EVERY reconnect so the server rebinds our new socket id via bid.
   socket.io.on('reconnect', () => {
-    if (roomFromURL) socket.emit('joinRoom', { code: roomFromURL, name: myName });
+    if (roomFromURL) socket.emit('joinRoom', { code: roomFromURL, name: myName, bid: browserId });
   });
 }
 </script>

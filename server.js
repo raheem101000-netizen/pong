@@ -141,7 +141,7 @@ setupRoomEvents(io);
 io.on('connection', (socket) => {
   console.log('connect:', socket.id);
   socket.on('hb', () => { /* keepalive ping, no action needed */ });
-  socket.on('joinRoom', ({ code, name }) => {
+  socket.on('joinRoom', ({ code, name, bid }) => {
     const room = rooms[code];
     if (!room) { socket.emit('error', { msg: 'Room not found' }); return; }
 
@@ -153,20 +153,19 @@ io.on('connection', (socket) => {
     // Same socket already joined — ignore
     if (room.gameJoined.find(p => p.id === socket.id)) return;
 
-    // RECONNECT: a player with this name already has a slot but their old socket
-    // dropped (Render kills idle WebSockets). Rebind THIS socket to that slot so
-    // their input is recognised again. Without this, paddleMove hits findIndex=-1
-    // and is silently dropped — the paddle freezes on the server forever.
-    const prior = room.gameJoined.find(p => p.name === (name || 'Player'));
-    if (prior && room.gameJoined.length >= 1) {
-      console.log('REBIND: ' + (name||'?') + ' ' + prior.id + ' -> ' + socket.id);
+    // RECONNECT: match by stable browser ID (bid) so a new socket.id after a
+    // Render WebSocket drop gets rebound to the correct slot. Name-matching was
+    // removed — it could mis-assign when both players share a name.
+    const prior = bid ? room.gameJoined.find(p => p.bid === bid) : null;
+    if (prior) {
+      console.log('REBIND: ' + (name||'?') + ' bid=' + bid + ' ' + prior.id + ' -> ' + socket.id);
       prior.id = socket.id;
       const idx = room.gameJoined.indexOf(prior);
       socket.emit('roomJoined', { code, role: idx === 0 ? 'p1' : 'p2', myName: name, paddlePos: idx === 0 ? 'BOTTOM' : 'TOP' });
       return;
     }
 
-    room.gameJoined.push({ id: socket.id, name: name || 'Player' });
+    room.gameJoined.push({ id: socket.id, bid: bid || null, name: name || 'Player' });
 
     // First to join = p1 (bottom paddle), second = p2 (top paddle)
     const myIndex = room.gameJoined.length - 1;
@@ -203,6 +202,10 @@ io.on('connection', (socket) => {
     const room = rooms[code];
     if (!room || !room.state || !room.gameJoined) return;
     const idx = room.gameJoined.findIndex(p => p.id === socket.id);
+    if (idx === -1) {
+      console.log('[paddleMove] DROP idx=-1 socket=' + socket.id + ' slots=' + JSON.stringify(room.gameJoined.map(p=>p.id)));
+      return;
+    }
     const clamped = Math.max(0, Math.min(W - PADDLE_LONG, x));
     if (idx === 0) room.state.p1.x = clamped;
     if (idx === 1) room.state.p2.x = clamped;
@@ -221,12 +224,26 @@ io.on('connection', (socket) => {
     }
   });
   socket.on('disconnect', () => {
-    console.log('DISCONNECT: socket=' + socket.id + ' room=' + (socket.roomCode||'none'));
     const code = socket.roomCode;
+    const sid = socket.id;
+    console.log('DISCONNECT: socket=' + sid + ' room=' + (code||'none'));
     if (!code || !rooms[code]) return;
-    if (rooms[code].interval) clearInterval(rooms[code].interval);
-    io.to(code).emit('opponentLeft');
-    delete rooms[code];
+    // Grace period: Render free tier drops WebSockets mid-game. Give the player
+    // 15s to reconnect and rebind. If their bid rebinds the slot to a new socket.id
+    // before the timer fires, slotStillOwned will be false and we leave the game alone.
+    setTimeout(() => {
+      const room = rooms[code];
+      if (!room) return;
+      const slotStillOwned = room.gameJoined && room.gameJoined.some(p => p.id === sid);
+      if (!slotStillOwned) {
+        console.log('DISCONNECT grace: ' + sid + ' rebound — game continues');
+        return;
+      }
+      console.log('DISCONNECT grace expired for room ' + code + ' — ending game');
+      if (room.interval) clearInterval(room.interval);
+      io.to(code).emit('opponentLeft');
+      delete rooms[code];
+    }, 15000);
   });
 });
 
