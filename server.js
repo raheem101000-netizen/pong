@@ -49,6 +49,7 @@ function resetBall(state, towardsP1) {
   state.ball.x = W/2; state.ball.y = H/2;
   state.ball.vx = 0; state.ball.vy = 0;
   state.delay = 90; state._pendingDir = towardsP1;
+  console.log('RESET: p1.dir=' + state.p1.dir + ' p1.x=' + Math.round(state.p1.x) + ' | p2.dir=' + state.p2.dir + ' p2.x=' + Math.round(state.p2.x));
 }
 
 function tickBall(room) {
@@ -147,8 +148,9 @@ setupRoomEvents(io);
 io.on('connection', (socket) => {
   console.log('connect:', socket.id);
   socket.on('joinRoom', ({ code, name, clientId }) => {
+    console.log('JOIN: socket=' + socket.id + ' code=' + code + ' name=' + name + ' clientId=' + clientId);
     const room = rooms[code];
-    if (!room) { socket.emit('error', { msg: 'Room not found' }); return; }
+    if (!room) { console.log('JOIN-FAIL: room ' + code + ' not found'); socket.emit('error', { msg: 'Room not found' }); return; }
 
     socket.join(code);
     socket.roomCode = code;
@@ -219,7 +221,7 @@ io.on('connection', (socket) => {
     if (!room || !room.state || !room.gameJoined) return;
     const idx = room.gameJoined.findIndex(p => p.id === socket.id);
     const d = dir === -1 ? -1 : dir === 1 ? 1 : 0;
-    if (idx === -1) { console.log('LOST INPUT: socket ' + socket.id + ' not in gameJoined, dir=' + d + ' dropped'); }
+    if (idx === -1) { console.log('LOST INPUT: socket=' + socket.id + ' dir=' + d + ' gameJoined has ' + room.gameJoined.length + ' players with ids ' + room.gameJoined.map(p=>p.id).join(',')); }
     if (idx === 0) room.state.p1.dir = d;
     if (idx === 1) room.state.p2.dir = d;
   });
