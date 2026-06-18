@@ -157,7 +157,6 @@ let gameState = null;
 let seriesMatch = 1, myWins = 0, oppWins = 0, myBalance = 0;
 let results = [];
 let gameRunning = false;
-let localPaddleX = null; // raw canvas pixels, same as solo
 let keys = {};
 function connect() {
   socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
@@ -220,13 +219,6 @@ function connect() {
   });
   socket.on('error', ({ msg }) => showError(msg));
 }
-function sendPaddlePos() {
-  // touch only — keyboard is handled by keyboardLoop
-  if (!socket || !gameRunning) return;
-  if (localPaddleX !== null) {
-    socket.emit('paddleMove', { x: localPaddleX });
-  }
-}
 function updateHUD(match, wins, oppW, balance) {
   const tier = getMatchTier(match), color = TIER_COLORS[tier], bal = balance;
   document.getElementById('hud-balance').textContent = (bal>=0?'+':'')+'$'+bal;
@@ -263,7 +255,7 @@ function draw() {
   const flip = myRole === 'p2';
   const flipY = (sy) => flip ? (S_H - sy - PADDLE_SHORT_S) : sy;
   const mirrorX = (sx) => flip ? (S_W - sx - S_PADDLE_LONG) : sx;
-  const myServerX  = localPaddleX !== null ? localPaddleX : (myRole==='p1' ? s.p1.x : s.p2.x);
+  const myServerX  = (myRole==='p1' ? s.p1.x : s.p2.x);
   const oppServerX = myRole==='p1' ? s.p2.x : s.p1.x;
   const myServerY  = myRole==='p1' ? s.p1.y : s.p2.y;
   const oppServerY = myRole==='p1' ? s.p2.y : s.p1.y;
@@ -332,18 +324,19 @@ document.addEventListener('keydown', e=>{ keys[e.key]=true; if(['ArrowLeft','Arr
 document.addEventListener('keyup', e=>{ keys[e.key]=false; });
 function applyTouch(e) {
   e.preventDefault();
+  if (e.touches.length === 0) { setDir(0); return; }
   const rect = canvas.getBoundingClientRect();
-  if (e.touches.length === 0) { return; }
   const t = e.touches[0];
-  const serverX = ((t.clientX - rect.left) / rect.width) * S_W;
-  let paddleLeft = Math.max(0, Math.min(S_W - S_PADDLE_LONG, serverX - S_PADDLE_LONG / 2));
-  if (myRole === 'p2') paddleLeft = S_W - paddleLeft - S_PADDLE_LONG; // un-mirror for server
-  localPaddleX = paddleLeft;
-  socket.emit('paddleMove', { x: localPaddleX });
+  const half = rect.left + rect.width / 2;
+  // Touch left half = move left on MY screen, right half = right. p2's view is
+  // mirrored, so invert for them so it matches what they see.
+  let d = t.clientX < half ? -1 : 1;
+  if (myRole === 'p2') d = -d;
+  setDir(d);
 }
 canvas.addEventListener('touchstart', applyTouch, { passive: false });
 canvas.addEventListener('touchmove',  applyTouch, { passive: false });
-canvas.addEventListener('touchend',   e => { e.preventDefault(); }, { passive: false });
+canvas.addEventListener('touchend',   e => { e.preventDefault(); setDir(0); }, { passive: false });
 document.getElementById('btn-create').onclick=()=>{ myName=document.getElementById('name-input').value.trim()||'Player 1'; connect(); socket.on('connect',()=>socket.emit('createRoom',{name:myName})); };
 document.getElementById('btn-join').onclick=()=>{ const code=document.getElementById('code-input').value.trim(); if(code.length!==4){showError('Enter a 4-digit code');return;} myName=document.getElementById('name-input').value.trim()||'Player 2'; connect(); socket.on('connect',()=>socket.emit('joinRoom',{code,name:myName})); };
 document.getElementById('btn-cancel').onclick=()=>{ if(socket)socket.disconnect(); document.getElementById('waiting-screen').style.display='none'; document.getElementById('overlay').style.display='flex'; };
@@ -352,33 +345,25 @@ document.getElementById('btn-quit-match').onclick=()=>{ if(socket)socket.disconn
 document.getElementById('btn-cashout').onclick=()=>{ alert('Cashing out $'+Math.max(0,myBalance)+'! (Stripe integration goes here)'); };
 document.getElementById('btn-play-again').onclick=()=>{ document.getElementById('series-result').style.display='none'; document.getElementById('overlay').style.display='flex'; };
 document.getElementById('btn-lobby').onclick=()=>{ if(socket)socket.disconnect(); document.getElementById('series-result').style.display='none'; document.getElementById('overlay').style.display='flex'; };
-function keyboardLoop() {
-  if (gameRunning && (keys['ArrowLeft'] || keys['ArrowRight'] || keys['a'] || keys['A'] || keys['d'] || keys['D'])) {
-    const pspd = S_W * 0.028;
-    if (localPaddleX === null) {
-      localPaddleX = myRole === 'p1'
-        ? (gameState?.p1?.x ?? S_W/2 - S_PADDLE_LONG/2)
-        : (gameState?.p2?.x ?? S_W/2 - S_PADDLE_LONG/2);
-    }
-    const dir = myRole === 'p2' ? -1 : 1; // p2 view is mirrored, invert keys
-    if (keys['ArrowLeft']  || keys['a'] || keys['A']) localPaddleX -= pspd * dir;
-    if (keys['ArrowRight'] || keys['d'] || keys['D']) localPaddleX += pspd * dir;
-    localPaddleX = Math.max(0, Math.min(S_W - S_PADDLE_LONG, localPaddleX));
-    socket.emit('paddleMove', { x: localPaddleX });
+// Send paddle direction to the server. Server owns the paddle; we only report intent.
+let lastDir = 0;
+function setDir(d) {
+  if (d !== lastDir) {
+    lastDir = d;
+    if (socket && socket.connected) socket.emit('paddleDir', { dir: d });
   }
-  requestAnimationFrame(keyboardLoop);
 }
-keyboardLoop();
-
-// Steady independent paddle sender — does NOT depend on receiving state and does
-// NOT use requestAnimationFrame (which pauses when the screen dims). Ensures the
-// server always has this player's current paddle position. Fixes opponent-appears-
-// frozen and ball-through-fast-moving-paddle.
-setInterval(() => {
-  if (socket && socket.connected && gameRunning && localPaddleX !== null) {
-    socket.emit('paddleMove', { x: localPaddleX });
-  }
-}, 1000 / 40);
+function currentKeyDir() {
+  const left  = keys['ArrowLeft']  || keys['a'] || keys['A'];
+  const right = keys['ArrowRight'] || keys['d'] || keys['D'];
+  let d = (left === right) ? 0 : (left ? -1 : 1);
+  if (myRole === 'p2') d = -d; // p2 view mirrored
+  return d;
+}
+document.addEventListener('keydown', () => { if (gameRunning) setDir(currentKeyDir()); });
+document.addEventListener('keyup',   () => { if (gameRunning) setDir(currentKeyDir()); });
+// Steady re-send so a dropped packet can never leave the paddle stuck.
+setInterval(() => { if (socket && socket.connected && gameRunning) socket.emit('paddleDir', { dir: lastDir }); }, 100);
 window.addEventListener('resize', resize);
 resize(); buildPhaseBar(1); updateHUD(1,0,0,0); draw();
 
