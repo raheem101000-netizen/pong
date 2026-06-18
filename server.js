@@ -147,8 +147,21 @@ io.on('connection', (socket) => {
 
     if (!room.gameJoined) room.gameJoined = [];
 
-    // Prevent same socket joining twice
+    // Same socket already joined — ignore
     if (room.gameJoined.find(p => p.id === socket.id)) return;
+
+    // RECONNECT: a player with this name already has a slot but their old socket
+    // dropped (Render kills idle WebSockets). Rebind THIS socket to that slot so
+    // their input is recognised again. Without this, paddleMove hits findIndex=-1
+    // and is silently dropped — the paddle freezes on the server forever.
+    const prior = room.gameJoined.find(p => p.name === (name || 'Player'));
+    if (prior && room.gameJoined.length >= 1) {
+      console.log('REBIND: ' + (name||'?') + ' ' + prior.id + ' -> ' + socket.id);
+      prior.id = socket.id;
+      const idx = room.gameJoined.indexOf(prior);
+      socket.emit('roomJoined', { code, role: idx === 0 ? 'p1' : 'p2', myName: name, paddlePos: idx === 0 ? 'BOTTOM' : 'TOP' });
+      return;
+    }
 
     room.gameJoined.push({ id: socket.id, name: name || 'Player' });
 
