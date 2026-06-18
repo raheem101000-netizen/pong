@@ -157,7 +157,7 @@ let gameRunning = false;
 let localPaddleX = null; // raw canvas pixels, same as solo
 let keys = {};
 function connect() {
-  socket = io(SERVER_URL, { transports: ['websocket'] });
+  socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
   socket.on('connect_error', () => showError('Cannot connect to server'));
   socket.on('roomCreated', ({ code, role }) => {
     myRole = role;
@@ -372,6 +372,10 @@ if (roomFromURL && nameFromURL) {
   connect();
   socket.on('connect', () => {
     socket.emit('joinRoom', { code: roomFromURL, name: myName });
+  });
+  // Re-join on EVERY reconnect so the server rebinds our new socket id.
+  socket.io.on('reconnect', () => {
+    if (roomFromURL) socket.emit('joinRoom', { code: roomFromURL, name: myName });
   });
 }
 </script>
