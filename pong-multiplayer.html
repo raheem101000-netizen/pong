@@ -364,11 +364,18 @@ function paddleLoop() {
   requestAnimationFrame(paddleLoop);
 }
 paddleLoop();
+// Send paddle position ~20×/sec and ONLY when it actually moved. A still paddle
+// sends nothing. This roughly halves outgoing traffic and stops the message flood
+// that chokes Render's free tier and causes the mid-match freeze.
+let lastSentX = null;
 setInterval(() => {
   if (socket && socket.connected && gameRunning && localPaddleX !== null) {
-    socket.emit('paddleMove', { x: localPaddleX });
+    if (lastSentX === null || Math.abs(localPaddleX - lastSentX) > 0.5) {
+      socket.emit('paddleMove', { x: localPaddleX });
+      lastSentX = localPaddleX;
+    }
   }
-}, 1000 / 40);
+}, 1000 / 20);
 window.addEventListener('resize', resize);
 resize(); buildPhaseBar(1); updateHUD(1,0,0,0); draw();
 
