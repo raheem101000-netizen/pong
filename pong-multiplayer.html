@@ -161,6 +161,8 @@ let localPaddleX = null; // raw canvas pixels, same as solo
 let keys = {};
 function connect() {
   socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
+  socket.on('disconnect', (reason) => console.log('[CLIENT] disconnected:', reason));
+  socket.io.on('reconnect', (n) => console.log('[CLIENT] reconnected after', n, 'attempts'));
   socket.on('connect_error', () => showError('Cannot connect to server'));
   socket.on('roomCreated', ({ code, role }) => {
     myRole = role;
