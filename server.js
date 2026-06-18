@@ -65,7 +65,8 @@ function tickBall(room) {
   if (b.x + BALL_R > W)  { b.x = W - BALL_R; b.vx = -Math.abs(b.vx); }
   function hitPaddle(p, isP1) {
     const prevY = b.y - b.vy;
-    const hitX = b.x+BALL_R>p.x && b.x-BALL_R<p.x+PADDLE_LONG;
+    const FORGIVE = Math.round(W * 0.05); // ~20px catch tolerance for fast-chasing paddles
+    const hitX = b.x+BALL_R > p.x - FORGIVE && b.x-BALL_R < p.x + PADDLE_LONG + FORGIVE;
     const hitYNow = b.y+BALL_R>p.y && b.y-BALL_R<p.y+PADDLE_SHORT;
     const paddleY = isP1 ? p.y : p.y+PADDLE_SHORT;
     const crossed = isP1
