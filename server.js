@@ -25,7 +25,6 @@ const PADDLE_LONG    = Math.round(W * 0.28);
 const PADDLE_SHORT   = Math.round(H * 0.018);
 const BALL_SPEED     = Math.min(W,H) * 0.022;
 const SPEED_MAX      = Math.min(W,H) * 0.040;
-const PADDLE_SPEED   = Math.round(W * 0.022);
 const TIER_LABELS = ['EASY','EASY+','MEDIUM','MEDIUM+','HARD','HARD+','MAX'];
 
 function getMatchTier(m) { return Math.min(Math.floor((m - 1) / 3), 6); }
@@ -39,8 +38,8 @@ function initMatchState(room) {
   if (!room.results)     room.results = [];
   room.state = {
     ball: { x: W/2, y: H/2, vx: 0, vy: 0 },
-    p1:   { x: W/2 - PADDLE_LONG/2, y: H - PADDLE_SHORT - Math.round(H*0.04), score: 0, dir: 0 },
-    p2:   { x: W/2 - PADDLE_LONG/2, y: Math.round(H*0.04), score: 0, dir: 0 },
+    p1:   { x: W/2 - PADDLE_LONG/2, y: H - PADDLE_SHORT - Math.round(H*0.04), score: 0 },
+    p2:   { x: W/2 - PADDLE_LONG/2, y: Math.round(H*0.04), score: 0 },
     tier: getMatchTier(room.seriesMatch), delay: 180, active: false,
   };
 }
@@ -49,7 +48,6 @@ function resetBall(state, towardsP1) {
   state.ball.x = W/2; state.ball.y = H/2;
   state.ball.vx = 0; state.ball.vy = 0;
   state.delay = 90; state._pendingDir = towardsP1;
-  console.log('RESET: p1.dir=' + state.p1.dir + ' p1.x=' + Math.round(state.p1.x) + ' | p2.dir=' + state.p2.dir + ' p2.x=' + Math.round(state.p2.x));
 }
 
 function tickBall(room) {
@@ -66,25 +64,21 @@ function tickBall(room) {
   if (b.x - BALL_R < 0)  { b.x = BALL_R;     b.vx =  Math.abs(b.vx); }
   if (b.x + BALL_R > W)  { b.x = W - BALL_R; b.vx = -Math.abs(b.vx); }
   function hitPaddle(p, isP1) {
-    const prevX = b.x - b.vx, prevY = b.y - b.vy;
-    const faceY = isP1 ? p.y : p.y + PADDLE_SHORT;
-    const ballFacePrev = isP1 ? prevY + BALL_R : prevY - BALL_R;
-    const ballFaceNow  = isP1 ? b.y + BALL_R   : b.y - BALL_R;
+    const prevY = b.y - b.vy;
+    const hitX = b.x+BALL_R>p.x && b.x-BALL_R<p.x+PADDLE_LONG;
+    const hitYNow = b.y+BALL_R>p.y && b.y-BALL_R<p.y+PADDLE_SHORT;
+    const paddleY = isP1 ? p.y : p.y+PADDLE_SHORT;
     const crossed = isP1
-      ? (ballFacePrev <= faceY && ballFaceNow >= faceY)
-      : (ballFacePrev >= faceY && ballFaceNow <= faceY);
-    if (!crossed) return;
-    const denom = (ballFaceNow - ballFacePrev) || 1;
-    const t = (faceY - ballFacePrev) / denom;
-    const crossX = prevX + (b.x - prevX) * t;
-    if (crossX + BALL_R > p.x && crossX - BALL_R < p.x + PADDLE_LONG) {
-      const rel = (crossX - (p.x + PADDLE_LONG/2)) / (PADDLE_LONG/2);
+      ? (prevY-BALL_R > paddleY && b.y-BALL_R <= paddleY)
+      : (prevY+BALL_R < paddleY && b.y+BALL_R >= paddleY);
+
+    if (hitX && (hitYNow || crossed)) {
+      const rel = (b.x-(p.x+PADDLE_LONG/2))/(PADDLE_LONG/2);
       const clampedRel = Math.max(-1, Math.min(1, rel));
-      const spd = Math.min(Math.hypot(b.vx, b.vy) + 0.3, SPEED_MAX);
-      b.vx = Math.sin(clampedRel*(Math.PI/4)) * spd;
-      b.vy = Math.cos(clampedRel*(Math.PI/4)) * spd * (isP1 ? -1 : 1);
-      b.x = crossX;
-      b.y = isP1 ? p.y - BALL_R - 1 : p.y + PADDLE_SHORT + BALL_R + 1;
+      const spd = Math.min(Math.hypot(b.vx,b.vy)+0.3, SPEED_MAX);
+      b.vx = Math.sin(clampedRel*(Math.PI/4))*spd;
+      b.vy = Math.cos(clampedRel*(Math.PI/4))*spd*(isP1?-1:1);
+      b.y = isP1 ? p.y-BALL_R-1 : p.y+PADDLE_SHORT+BALL_R+1;
     }
   }
   hitPaddle(s.p1, true); hitPaddle(s.p2, false);
@@ -104,10 +98,6 @@ function startGameLoop(room) {
   room.phase = 'playing';
   room.interval = setInterval(() => {
     if (!room.state) return;
-    // Move paddles by direction, clamped so they can never get stuck
-    const p1 = room.state.p1, p2 = room.state.p2;
-    if (p1.dir) p1.x = Math.max(0, Math.min(W - PADDLE_LONG, p1.x + p1.dir * PADDLE_SPEED));
-    if (p2.dir) p2.x = Math.max(0, Math.min(W - PADDLE_LONG, p2.x + p2.dir * PADDLE_SPEED));
     const winner = tickBall(room);
     io.to(room.code).emit('state', { ball: room.state.ball, p1: room.state.p1, p2: room.state.p2, delay: room.state.delay });
     if (winner) { clearInterval(room.interval); room.interval = null; endMatch(room, winner); }
@@ -147,43 +137,19 @@ setupRoomEvents(io);
 
 io.on('connection', (socket) => {
   console.log('connect:', socket.id);
-  socket.on('joinRoom', ({ code, name, clientId }) => {
-    console.log('JOIN: socket=' + socket.id + ' code=' + code + ' name=' + name + ' clientId=' + clientId);
+  socket.on('joinRoom', ({ code, name }) => {
     const room = rooms[code];
-    if (!room) { console.log('JOIN-FAIL: room ' + code + ' not found'); socket.emit('error', { msg: 'Room not found' }); return; }
+    if (!room) { socket.emit('error', { msg: 'Room not found' }); return; }
 
     socket.join(code);
     socket.roomCode = code;
 
     if (!room.gameJoined) room.gameJoined = [];
 
-    // Same socket already joined — nothing to do
+    // Prevent same socket joining twice
     if (room.gameJoined.find(p => p.id === socket.id)) return;
 
-    // RECONNECT: a player with this clientId already has a slot, but their old
-    // socket dropped (Render kills idle WebSockets). Re-bind THIS new socket
-    // to that existing slot instead of adding a third player. Without this,
-    // the reconnected socket isn't recognised and all its input is dropped,
-    // freezing the paddle at the wall.
-    const existing = clientId ? room.gameJoined.find(p => p.clientId === clientId) : null;
-    if (existing) {
-      const oldId = existing.id;
-      // Cancel the pending match-end timer for the old socket — we're back.
-      if (room.graceTimers && room.graceTimers[oldId]) {
-        clearTimeout(room.graceTimers[oldId]);
-        delete room.graceTimers[oldId];
-      }
-      existing.id = socket.id;
-      existing.disconnectedAt = null;
-      const idx = room.gameJoined.indexOf(existing);
-      const myRole = idx === 0 ? 'p1' : 'p2';
-      socket.emit('roomJoined', { code, role: myRole, myName: name, paddlePos: myRole === 'p1' ? 'BOTTOM' : 'TOP' });
-      console.log('REBIND: ' + (name||'?') + ' ' + oldId + ' -> ' + socket.id + ' as ' + myRole);
-      return;
-    }
-
-    // New player joining for the first time
-    room.gameJoined.push({ id: socket.id, name: name || 'Player', clientId: clientId || null });
+    room.gameJoined.push({ id: socket.id, name: name || 'Player' });
 
     // First to join = p1 (bottom paddle), second = p2 (top paddle)
     const myIndex = room.gameJoined.length - 1;
@@ -215,15 +181,13 @@ io.on('connection', (socket) => {
       }, 1000);
     }
   });
-  socket.on('paddleDir', ({ dir }) => {
+  socket.on('paddleMove', ({ x }) => {
     const code = socket.roomCode;
     const room = rooms[code];
     if (!room || !room.state || !room.gameJoined) return;
     const idx = room.gameJoined.findIndex(p => p.id === socket.id);
-    const d = dir === -1 ? -1 : dir === 1 ? 1 : 0;
-    if (idx === -1) { console.log('LOST INPUT: socket=' + socket.id + ' dir=' + d + ' gameJoined has ' + room.gameJoined.length + ' players with ids ' + room.gameJoined.map(p=>p.id).join(',')); }
-    if (idx === 0) room.state.p1.dir = d;
-    if (idx === 1) room.state.p2.dir = d;
+    if (idx === 0) room.state.p1.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
+    if (idx === 1) room.state.p2.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
   });
   socket.on('nextMatch', () => {
     const room = rooms[socket.roomCode];
@@ -241,27 +205,9 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const code = socket.roomCode;
     if (!code || !rooms[code]) return;
-    const room = rooms[code];
-    const player = room.gameJoined && room.gameJoined.find(p => p.id === socket.id);
-    if (!player) return;
-    // DO NOT delete the room or remove the player immediately. Render drops
-    // idle WebSockets constantly; the player will auto-reconnect and re-bind
-    // (joinRoom with same clientId). Keep their slot alive. Mark them as
-    // temporarily gone, and only end the match if they don't return in time.
-    player.disconnectedAt = Date.now();
-    if (room.graceTimers && room.graceTimers[socket.id]) clearTimeout(room.graceTimers[socket.id]);
-    if (!room.graceTimers) room.graceTimers = {};
-    const deadId = socket.id;
-    room.graceTimers[deadId] = setTimeout(() => {
-      // If this slot still holds the dead socket id (no reconnect rebound it), end the match.
-      const stillDead = room.gameJoined && room.gameJoined.find(p => p.id === deadId);
-      if (stillDead) {
-        room.gameJoined = room.gameJoined.filter(p => p.id !== deadId);
-        if (room.interval) { clearInterval(room.interval); room.interval = null; }
-        io.to(code).emit('opponentLeft');
-        delete rooms[code];
-      }
-    }, 12000); // 12s grace for reconnect
+    if (rooms[code].interval) clearInterval(rooms[code].interval);
+    io.to(code).emit('opponentLeft');
+    delete rooms[code];
   });
 });
 
