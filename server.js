@@ -49,6 +49,7 @@ function resetBall(state, towardsP1) {
   state.ball.x = W/2; state.ball.y = H/2;
   state.ball.vx = 0; state.ball.vy = 0;
   state.delay = 90; state._pendingDir = towardsP1;
+  console.log('RESET: p1.dir=' + state.p1.dir + ' p1.x=' + Math.round(state.p1.x) + ' | p2.dir=' + state.p2.dir + ' p2.x=' + Math.round(state.p2.x));
 }
 
 function tickBall(room) {
@@ -210,6 +211,7 @@ io.on('connection', (socket) => {
     const d = dir === -1 ? -1 : dir === 1 ? 1 : 0;
     if (idx === 0) room.state.p1.dir = d;
     if (idx === 1) room.state.p2.dir = d;
+    if (idx === -1) console.log('DIR-FAIL: socket ' + socket.id + ' not in gameJoined! dir=' + d);
   });
   socket.on('nextMatch', () => {
     const room = rooms[socket.roomCode];
