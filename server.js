@@ -25,6 +25,7 @@ const PADDLE_LONG    = Math.round(W * 0.28);
 const PADDLE_SHORT   = Math.round(H * 0.018);
 const BALL_SPEED     = Math.min(W,H) * 0.022;
 const SPEED_MAX      = Math.min(W,H) * 0.040;
+const PADDLE_SPEED   = Math.round(W * 0.022);
 const TIER_LABELS = ['EASY','EASY+','MEDIUM','MEDIUM+','HARD','HARD+','MAX'];
 
 function getMatchTier(m) { return Math.min(Math.floor((m - 1) / 3), 6); }
@@ -38,8 +39,8 @@ function initMatchState(room) {
   if (!room.results)     room.results = [];
   room.state = {
     ball: { x: W/2, y: H/2, vx: 0, vy: 0 },
-    p1:   { x: W/2 - PADDLE_LONG/2, y: H - PADDLE_SHORT - Math.round(H*0.04), score: 0 },
-    p2:   { x: W/2 - PADDLE_LONG/2, y: Math.round(H*0.04), score: 0 },
+    p1:   { x: W/2 - PADDLE_LONG/2, y: H - PADDLE_SHORT - Math.round(H*0.04), score: 0, dir: 0 },
+    p2:   { x: W/2 - PADDLE_LONG/2, y: Math.round(H*0.04), score: 0, dir: 0 },
     tier: getMatchTier(room.seriesMatch), delay: 180, active: false,
   };
 }
@@ -102,6 +103,10 @@ function startGameLoop(room) {
   room.phase = 'playing';
   room.interval = setInterval(() => {
     if (!room.state) return;
+    // Move paddles by direction, clamped so they can never get stuck
+    const p1 = room.state.p1, p2 = room.state.p2;
+    if (p1.dir) p1.x = Math.max(0, Math.min(W - PADDLE_LONG, p1.x + p1.dir * PADDLE_SPEED));
+    if (p2.dir) p2.x = Math.max(0, Math.min(W - PADDLE_LONG, p2.x + p2.dir * PADDLE_SPEED));
     const winner = tickBall(room);
     io.to(room.code).emit('state', { ball: room.state.ball, p1: room.state.p1, p2: room.state.p2, delay: room.state.delay });
     if (winner) { clearInterval(room.interval); room.interval = null; endMatch(room, winner); }
@@ -192,6 +197,15 @@ io.on('connection', (socket) => {
     const idx = room.gameJoined.findIndex(p => p.id === socket.id);
     if (idx === 0) room.state.p1.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
     if (idx === 1) room.state.p2.x = Math.max(0, Math.min(W - PADDLE_LONG, x));
+  });
+  socket.on('paddleDir', ({ dir }) => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || !room.state || !room.gameJoined) return;
+    const idx = room.gameJoined.findIndex(p => p.id === socket.id);
+    const d = dir === -1 ? -1 : dir === 1 ? 1 : 0;
+    if (idx === 0) room.state.p1.dir = d;
+    if (idx === 1) room.state.p2.dir = d;
   });
   socket.on('nextMatch', () => {
     const room = rooms[socket.roomCode];
